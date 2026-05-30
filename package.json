@@ -1,0 +1,28 @@
+{
+  "name": "discord-self-role-bot",
+  "version": "1.0.0",
+  "description": "A lightweight Discord bot that lets members self-assign roles from an administrator-curated list.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "deploy": "node deploy-commands.js",
+    "test": "jest"
+  },
+  "keywords": [
+    "discord",
+    "discord.js",
+    "self-role",
+    "bot"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5",
+    "mongoose": "^8.8.0"
+  },
+  "devDependencies": {
+    "fast-check": "^3.23.1",
+    "jest": "^29.7.0",
+    "mongodb-memory-server": "^10.1.2"
+  }
+}
