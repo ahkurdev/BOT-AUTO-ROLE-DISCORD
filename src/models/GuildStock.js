@@ -138,21 +138,44 @@ async function setCategories(guildId, categories) {
 /**
  * Apply a pure stockOps mutation and persist when it changed something.
  *
+ * Uses **optimistic concurrency control**: the document's `__v` (version key)
+ * is checked at write time. If another operation modified the document between
+ * the read and the write, the version will not match and the write is a no-op.
+ * The function then retries with the fresh document up to `maxRetries` times.
+ *
+ * This prevents the "lost update" race condition when two users `/wd` or `/dp`
+ * the same item simultaneously.
+ *
  * @param {string} guildId
  * @param {(categories: Array) => { categories: Array, changed: boolean, reason: string }} mutate
+ * @param {number} [maxRetries=3]
  * @returns {Promise<object>} the decision object, augmented with `categories`
  *   reflecting the stored state.
  */
-async function applyMutation(guildId, mutate) {
-  const doc = await ensureStock(guildId);
-  const current = doc.categories ? doc.categories.toObject?.() ?? doc.categories : [];
-  // Normalise to plain objects for the pure helper.
-  const plain = JSON.parse(JSON.stringify(current));
-  const result = mutate(plain);
-  if (result.changed) {
-    await setCategories(guildId, result.categories);
+async function applyMutation(guildId, mutate, maxRetries = 3) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const doc = await ensureStock(guildId);
+    const version = doc.__v;
+    const current = doc.categories ? doc.categories.toObject?.() ?? doc.categories : [];
+    // Normalise to plain objects for the pure helper.
+    const plain = JSON.parse(JSON.stringify(current));
+    const result = mutate(plain);
+    if (!result.changed) {
+      return result;
+    }
+    // Attempt to write only if the version has not changed since the read.
+    const updated = await GuildStock.findOneAndUpdate(
+      { guildId, __v: version },
+      { $set: { categories: result.categories }, $inc: { __v: 1 } },
+      { new: true },
+    );
+    if (updated) {
+      return result;
+    }
+    // Version mismatch — another operation modified the document. Retry.
   }
-  return result;
+  // All retries exhausted: report a conflict so the caller can inform the user.
+  return { changed: false, reason: 'conflict' };
 }
 
 /** Deposit amount of an item; persists on success. */
@@ -212,6 +235,22 @@ async function removeItem(guildId, categoryName, itemName) {
   return applyMutation(guildId, (cats) => stockOps.removeItem(cats, categoryName, itemName));
 }
 
+/**
+ * Reset all item quantities to 0 across every category.
+ * @param {string} guildId
+ * @returns {Promise<object|null>}
+ */
+async function resetAllStock(guildId) {
+  const doc = await getStock(guildId);
+  if (!doc) return null;
+  const cats = doc.categories ? (doc.categories.toObject?.() ?? doc.categories) : [];
+  const reset = JSON.parse(JSON.stringify(cats)).map((c) => ({
+    ...c,
+    items: (c.items || []).map((i) => ({ ...i, quantity: 0 })),
+  }));
+  return setCategories(guildId, reset);
+}
+
 module.exports = {
   GuildStock,
   getStock,
@@ -229,4 +268,6 @@ module.exports = {
   removeCategory,
   addItem,
   removeItem,
+  resetAllStock,
 };
+

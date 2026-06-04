@@ -11,6 +11,12 @@
  *   /livestock delete category       — hapus kategori (approver)
  *   /livestock item add|remove       — kelola item manual (approver)
  *   /livestock refresh               — re-render the board (approver)
+ *   /livestock setwd <channel>       — batasi /wd ke channel tertentu (approver)
+ *   /livestock setdp <channel>       — batasi /dp ke channel tertentu (approver)
+ *   /livestock clearwd               — hapus batasan channel /wd (approver)
+ *   /livestock cleardp               — hapus batasan channel /dp (approver)
+ *   /livestock clearlog              — hapus channel log (approver)
+ *   /livestock reset                 — reset semua stok ke 0 (approver)
  *
  * The board starts EMPTY. Approvers create categories first. On `/dp`, choosing
  * a category lets a brand-new item be created inside it; if the item already
@@ -27,11 +33,15 @@
 const {
   SlashCommandBuilder,
   PermissionFlagsBits,
-  MessageFlags,
   EmbedBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ActionRowBuilder,
+  MessageFlags,
 } = require('discord.js');
 
 const stockOps = require('../utils/stockOps');
+const { genericErrorEmbed, replyEphemeral, replyPublic, COLORS, applyBranding } = require('../utils/shared');
 const {
   liveStockEmbed,
   withdrawSuccessEmbed,
@@ -46,26 +56,24 @@ const {
   wrongChannelEmbed,
 } = require('../utils/stockEmbeds');
 const repo = require('../models/GuildStock');
+const { getConfig: getGuildConfig } = require('../models/GuildConfig');
+const { logTransaction, getHistory } = require('../models/GuildTransactions');
 
-/**
- * Read the approver role id from the environment.
- * @param {Record<string, string|undefined>} [env=process.env]
- * @returns {string}
- */
-function getApproverRoleId(env = process.env) {
-  return (env.APPROVER_ROLE_ID || '').trim();
-}
+/** customId prefix for the reset confirmation button. */
+const RESET_CONFIRM_PREFIX = 'livestock-reset-confirm';
+const RESET_CANCEL_PREFIX = 'livestock-reset-cancel';
 
 /**
  * Whether the interacting member may use approver-only stock subcommands.
- * Holders of the configured approver role, or members with Administrator /
- * Manage Guild, are allowed.
+ * Holds when the member has at least one of the configured approver roles, or
+ * when they hold Administrator / Manage Guild.
  * @param {import('discord.js').ChatInputCommandInteraction} interaction
+ * @param {string[]} approverRoleIds — resolved from GuildConfig
  * @returns {boolean}
  */
-function isStockManager(interaction) {
-  const approverRoleId = getApproverRoleId();
-  if (approverRoleId && interaction.member?.roles?.cache?.has(approverRoleId)) {
+function isStockManager(interaction, approverRoleIds) {
+  const ids = Array.isArray(approverRoleIds) ? approverRoleIds : (approverRoleIds ? [approverRoleIds] : []);
+  if (ids.length > 0 && ids.some((id) => interaction.member?.roles?.cache?.has(id))) {
     return true;
   }
   const perms = interaction.memberPermissions;
@@ -76,43 +84,22 @@ function isStockManager(interaction) {
   );
 }
 
-function genericErrorEmbed() {
-  return new EmbedBuilder()
-    .setColor(0xed4245)
-    .setTitle('Terjadi kesalahan')
-    .setDescription('Aksi tidak dapat diselesaikan. Coba lagi sebentar lagi.')
-    .setFooter({ text: 'Created by Allan' });
-}
-
 function notManagerEmbed() {
-  return new EmbedBuilder()
-    .setColor(0xed4245)
-    .setTitle('Tidak berwenang')
-    .setDescription('Hanya approver yang bisa mengatur Live Stock.')
-    .setFooter({ text: 'Created by Allan' });
+  return applyBranding(
+    new EmbedBuilder()
+      .setColor(COLORS.error)
+      .setTitle('Tidak berwenang')
+      .setDescription('Hanya approver yang bisa mengatur Live Stock.'),
+  );
 }
 
-function replyEphemeral(interaction, embed) {
-  const payload = { embeds: [embed], flags: MessageFlags.Ephemeral };
-  if (interaction.replied || interaction.deferred) {
-    return interaction.followUp(payload);
-  }
-  return interaction.reply(payload);
-}
-
-/**
- * Reply publicly (visible to everyone in the channel) — used for /wd and /dp so
- * transactions are transparent to the whole channel.
- * @param {import('discord.js').RepliableInteraction} interaction
- * @param {EmbedBuilder} embed
- * @returns {Promise<unknown>}
- */
-function replyPublic(interaction, embed) {
-  const payload = { embeds: [embed] };
-  if (interaction.replied || interaction.deferred) {
-    return interaction.followUp(payload);
-  }
-  return interaction.reply(payload);
+function successEmbed(title, description) {
+  return applyBranding(
+    new EmbedBuilder()
+      .setColor(COLORS.success)
+      .setTitle(title)
+      .setDescription(description),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -197,6 +184,19 @@ const livestockData = new SlashCommandBuilder()
       ),
   )
   .addSubcommand((sub) => sub.setName('refresh').setDescription('Perbarui tampilan papan'))
+  .addSubcommand((sub) => sub.setName('clearwd').setDescription('Hapus batasan channel /wd'))
+  .addSubcommand((sub) => sub.setName('cleardp').setDescription('Hapus batasan channel /dp'))
+  .addSubcommand((sub) => sub.setName('clearlog').setDescription('Hapus channel log transaksi'))
+  .addSubcommand((sub) => sub.setName('reset').setDescription('Reset semua stok ke 0'))
+  .addSubcommand((sub) =>
+    sub
+      .setName('history')
+      .setDescription('Lihat riwayat transaksi terakhir')
+      .addUserOption((o) => o.setName('user').setDescription('Filter per user (opsional)'))
+      .addIntegerOption((o) =>
+        o.setName('jumlah').setDescription('Jumlah transaksi (default 10, max 25)').setMinValue(1).setMaxValue(25),
+      ),
+  )
   .addSubcommandGroup((group) =>
     group
       .setName('create')
@@ -288,7 +288,7 @@ async function refreshBoard(guild, doc) {
     }
     const sent = await channel.send({ embeds: [embed] });
     await repo.setBoardLocation(guild.id, channel.id, sent.id);
-  } catch (err) {
+  } catch (_err) {
     // best-effort; board refresh failures must not break the command reply
   }
 }
@@ -310,7 +310,7 @@ async function postTransactionLog(guild, stock, entry) {
       return;
     }
     await channel.send({ embeds: [transactionLogEmbed(entry)] });
-  } catch (err) {
+  } catch (_err) {
     // best-effort
   }
 }
@@ -391,6 +391,11 @@ async function handleTransaction(interaction, type) {
             available: result.available,
           }),
         );
+      case 'conflict':
+        return replyEphemeral(
+          interaction,
+          genericErrorEmbed('Terjadi konflik data (transaksi bersamaan). Silakan coba lagi.'),
+        );
       default:
         return replyEphemeral(interaction, genericErrorEmbed());
     }
@@ -411,6 +416,20 @@ async function handleTransaction(interaction, type) {
     itemName: resolvedItem,
     categoryName: resolvedCategory,
     balance: newQty,
+  });
+
+  // Persist transaction to the database for audit trail (best-effort).
+  const userId = interaction.user?.id || interaction.member?.id || '';
+  const userName = interaction.user?.tag || '';
+  await logTransaction({
+    guildId,
+    type,
+    userId,
+    userName,
+    itemName: resolvedItem,
+    categoryName: resolvedCategory,
+    amount,
+    balanceAfter: newQty,
   });
 
   const embed =
@@ -449,13 +468,14 @@ function handleDeposit(interaction) {
 // ---------------------------------------------------------------------------
 
 async function handleLivestock(interaction) {
-  if (!isStockManager(interaction)) {
+  const guildId = interaction.guild.id;
+  const guildCfg = await getGuildConfig(guildId);
+  if (!isStockManager(interaction, guildCfg.approverRoleIds)) {
     return replyEphemeral(interaction, notManagerEmbed());
   }
 
   const group = interaction.options.getSubcommandGroup(false);
   const sub = interaction.options.getSubcommand();
-  const guildId = interaction.guild.id;
 
   try {
     if (!group && sub === 'channel') {
@@ -504,6 +524,67 @@ async function handleLivestock(interaction) {
       );
     }
 
+    // --- New: clear channel restrictions ---
+    if (!group && sub === 'clearwd') {
+      await repo.ensureStock(guildId);
+      await repo.setTransactionChannel(guildId, 'withdraw', null);
+      return replyEphemeral(
+        interaction,
+        successEmbed('Batasan dihapus', 'Perintah `/wd` sekarang bisa digunakan di semua channel.'),
+      );
+    }
+
+    if (!group && sub === 'cleardp') {
+      await repo.ensureStock(guildId);
+      await repo.setTransactionChannel(guildId, 'deposit', null);
+      return replyEphemeral(
+        interaction,
+        successEmbed('Batasan dihapus', 'Perintah `/dp` sekarang bisa digunakan di semua channel.'),
+      );
+    }
+
+    if (!group && sub === 'clearlog') {
+      await repo.setLogChannel(guildId, null);
+      return replyEphemeral(
+        interaction,
+        successEmbed('Log dihapus', 'Channel log transaksi sudah dinonaktifkan.'),
+      );
+    }
+
+    // --- Reset with confirmation ---
+    if (!group && sub === 'reset') {
+      const stock = await repo.getStock(guildId);
+      if (!stock || !stock.channelId) {
+        return replyEphemeral(interaction, stockNotConfiguredEmbed());
+      }
+      const confirmBtn = new ButtonBuilder()
+        .setCustomId(`${RESET_CONFIRM_PREFIX}:${guildId}`)
+        .setLabel('Ya, reset semua')
+        .setStyle(ButtonStyle.Danger);
+      const cancelBtn = new ButtonBuilder()
+        .setCustomId(`${RESET_CANCEL_PREFIX}:${guildId}`)
+        .setLabel('Batal')
+        .setStyle(ButtonStyle.Secondary);
+      const row = new ActionRowBuilder().addComponents(confirmBtn, cancelBtn);
+      return interaction.reply({
+        embeds: [
+          applyBranding(
+            new EmbedBuilder()
+              .setColor(COLORS.warning)
+              .setTitle('Konfirmasi reset')
+              .setDescription('Semua jumlah stok akan direset ke **0**. Tindakan ini tidak bisa dibatalkan.\n\nApakah kamu yakin?'),
+          ),
+        ],
+        components: [row],
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    // --- History ---
+    if (!group && sub === 'history') {
+      return handleLivestockHistory(interaction, guildId);
+    }
+
     if (!group && sub === 'refresh') {
       const stock = await repo.getStock(guildId);
       if (!stock || !stock.channelId) {
@@ -524,7 +605,7 @@ async function handleLivestock(interaction) {
     }
 
     return replyEphemeral(interaction, genericErrorEmbed());
-  } catch (err) {
+  } catch (_err) {
     return replyEphemeral(interaction, genericErrorEmbed());
   }
 }
@@ -578,14 +659,6 @@ async function handleItemSub(interaction, sub, guildId) {
   }
   await refreshBoard(interaction.guild);
   return replyEphemeral(interaction, successEmbed('Item dihapus', `"${name}" dihapus dari "${categoryName}".`));
-}
-
-function successEmbed(title, description) {
-  return new EmbedBuilder()
-    .setColor(0x57f287)
-    .setTitle(title)
-    .setDescription(description)
-    .setFooter({ text: 'Created by Allan' });
 }
 
 // ---------------------------------------------------------------------------
@@ -642,13 +715,101 @@ async function handleAutocomplete(interaction) {
       .map((name) => ({ name, value: name }));
 
     await interaction.respond(filtered);
-  } catch (err) {
+  } catch (_err) {
     // If anything fails, respond with an empty list rather than throwing.
     try {
       await interaction.respond([]);
-    } catch (innerErr) {
+    } catch (_innerErr) {
       // give up
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// /livestock history handler
+// ---------------------------------------------------------------------------
+
+/**
+ * Show recent transaction history from the database.
+ * @param {import('discord.js').ChatInputCommandInteraction} interaction
+ * @param {string} guildId
+ */
+async function handleLivestockHistory(interaction, guildId) {
+  const targetUser = interaction.options.getUser('user');
+  const limit = interaction.options.getInteger('jumlah') ?? 10;
+  const userId = targetUser ? targetUser.id : undefined;
+
+  const history = await getHistory(guildId, { limit, userId });
+  if (!history || history.length === 0) {
+    return replyEphemeral(
+      interaction,
+      applyBranding(
+        new EmbedBuilder()
+          .setColor(COLORS.info)
+          .setTitle('Riwayat transaksi')
+          .setDescription(targetUser ? `Belum ada transaksi dari ${targetUser}.` : 'Belum ada transaksi.'),
+      ),
+    );
+  }
+
+  const lines = history.map((tx) => {
+    const date = new Date(tx.createdAt);
+    const ts = `<t:${Math.floor(date.getTime() / 1000)}:R>`;
+    const sign = tx.type === 'withdraw' ? '-' : '+';
+    const label = tx.type === 'withdraw' ? 'WD' : 'DP';
+    return `${ts} **${label}** ${sign}${tx.amount} ${tx.itemName} (${tx.categoryName}) oleh <@${tx.userId}> | sisa: ${tx.balanceAfter}`;
+  });
+
+  return replyEphemeral(
+    interaction,
+    applyBranding(
+      new EmbedBuilder()
+        .setColor(COLORS.info)
+        .setTitle('Riwayat transaksi')
+        .setDescription(lines.join('\n'))
+        .setFooter({ text: `Menampilkan ${history.length} transaksi terakhir` }),
+    ),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// /livestock reset confirmation button handler
+// ---------------------------------------------------------------------------
+
+/**
+ * Handle the reset confirmation or cancellation button.
+ * @param {import('discord.js').ButtonInteraction} interaction
+ */
+async function handleResetButton(interaction) {
+  const isConfirm = interaction.customId.startsWith(RESET_CONFIRM_PREFIX);
+
+  if (isConfirm) {
+    const guildId = interaction.guild.id;
+    await repo.resetAllStock(guildId);
+    await refreshBoard(interaction.guild);
+    await interaction.update({
+      embeds: [
+        applyBranding(
+          new EmbedBuilder()
+            .setColor(COLORS.success)
+            .setTitle('Stok direset')
+            .setDescription('Semua jumlah stok sudah direset ke 0.'),
+        ),
+      ],
+      components: [],
+    });
+  } else {
+    await interaction.update({
+      embeds: [
+        applyBranding(
+          new EmbedBuilder()
+            .setColor(COLORS.info)
+            .setTitle('Reset dibatalkan')
+            .setDescription('Stok tidak diubah.'),
+        ),
+      ],
+      components: [],
+    });
   }
 }
 
@@ -656,11 +817,13 @@ module.exports = {
   wdData,
   dpData,
   livestockData,
-  getApproverRoleId,
   isStockManager,
   refreshBoard,
   handleWithdraw,
   handleDeposit,
   handleLivestock,
   handleAutocomplete,
+  handleResetButton,
+  RESET_CONFIRM_PREFIX,
+  RESET_CANCEL_PREFIX,
 };

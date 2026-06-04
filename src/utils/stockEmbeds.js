@@ -2,6 +2,7 @@
 
 const { EmbedBuilder } = require('discord.js');
 const { formatQuantity } = require('./stockOps');
+const { BRAND_FOOTER, COLORS, applyBranding, branded } = require('./shared');
 
 /**
  * Embed builders for the Live Stock board and the withdraw/deposit/log
@@ -14,13 +15,7 @@ const { formatQuantity } = require('./stockOps');
  * The withdraw/deposit confirmation and log embeds are intentionally
  * emoji-free, consistent with the rest of the bot's messages.
  */
-const COLORS = {
-  success: 0x57f287,
-  error: 0xed4245,
-  warning: 0xfee75c,
-  info: 0x5865f2,
-  stock: 0xf1c40f,
-};
+// COLORS imported from ./shared
 
 const ZERO_WIDTH = '\u200b';
 
@@ -77,7 +72,7 @@ function liveStockEmbed(categories, options = {}) {
   const list = Array.isArray(categories) ? categories : [];
   const embed = new EmbedBuilder()
     .setColor(COLORS.stock)
-    .setTitle(`📦 ${options.title || 'Live Stock'}`);
+    .setTitle(options.title || 'Live Stock');
 
   if (options.thumbnail) {
     embed.setThumbnail(options.thumbnail);
@@ -246,33 +241,7 @@ function wrongChannelEmbed({ commandLabel, channelId }) {
     .setDescription(`Perintah ${commandLabel} hanya bisa digunakan di <#${channelId}>.`);
 }
 
-const BRAND_FOOTER = 'Created by Allan';
-
-/**
- * Apply the "Created by Allan" footer, appending to any existing footer text.
- * @param {EmbedBuilder} embed
- * @returns {EmbedBuilder}
- */
-function applyBranding(embed) {
-  const existing = embed && embed.data && embed.data.footer ? embed.data.footer.text : '';
-  if (existing) {
-    if (!existing.includes(BRAND_FOOTER)) {
-      embed.setFooter({ text: `${existing} • ${BRAND_FOOTER}` });
-    }
-  } else {
-    embed.setFooter({ text: BRAND_FOOTER });
-  }
-  return embed;
-}
-
-/**
- * Wrap an embed-returning builder so its result always carries the brand footer.
- * @param {(...args: any[]) => EmbedBuilder} fn
- * @returns {(...args: any[]) => EmbedBuilder}
- */
-function branded(fn) {
-  return (...args) => applyBranding(fn(...args));
-}
+// BRAND_FOOTER, applyBranding, branded imported from ./shared
 
 module.exports = {
   ZERO_WIDTH,
