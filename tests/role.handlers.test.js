@@ -20,6 +20,15 @@
 
 // Mock the repository so the handlers never touch MongoDB.
 jest.mock('../src/models/GuildRoles');
+// Mock GuildConfig so getApprovalConfig resolves without a real DB connection.
+jest.mock('../src/models/GuildConfig', () => ({
+  getConfig: jest.fn().mockResolvedValue({
+    guildId: 'guild-1',
+    approverRoleId: null,
+    approvalChannelId: null,
+    approvalEnabled: false,
+  }),
+}));
 
 const { getRoles, addRole, removeRole, pruneRoles } = require('../src/models/GuildRoles');
 const {
@@ -139,7 +148,7 @@ describe('handleRoleSelect', () => {
 
     expect(interaction.member.roles.add).toHaveBeenCalledWith(roleId);
     expect(interaction.member.roles.remove).not.toHaveBeenCalled();
-    expect(embedText(replyEmbed(interaction))).toContain('Role added');
+    expect(embedText(replyEmbed(interaction))).toContain('Role ditambahkan');
   });
 
   // Requirement 2.2
@@ -157,7 +166,7 @@ describe('handleRoleSelect', () => {
 
     expect(interaction.member.roles.remove).toHaveBeenCalledWith(roleId);
     expect(interaction.member.roles.add).not.toHaveBeenCalled();
-    expect(embedText(replyEmbed(interaction))).toContain('Role removed');
+    expect(embedText(replyEmbed(interaction))).toContain('Role dilepas');
   });
 
   // Requirement 2.3
@@ -174,7 +183,7 @@ describe('handleRoleSelect', () => {
 
     expect(interaction.member.roles.add).not.toHaveBeenCalled();
     expect(interaction.member.roles.remove).not.toHaveBeenCalled();
-    expect(embedText(replyEmbed(interaction))).toContain('Cannot manage roles');
+    expect(embedText(replyEmbed(interaction))).toContain('Tidak bisa mengatur role');
   });
 
   // Requirement 2.4
@@ -191,7 +200,7 @@ describe('handleRoleSelect', () => {
 
     expect(interaction.member.roles.add).not.toHaveBeenCalled();
     expect(interaction.member.roles.remove).not.toHaveBeenCalled();
-    expect(embedText(replyEmbed(interaction))).toContain('Cannot manage this role');
+    expect(embedText(replyEmbed(interaction))).toContain('Tidak bisa mengatur role ini');
   });
 
   // Requirement 2.5
@@ -205,7 +214,7 @@ describe('handleRoleSelect', () => {
     expect(pruneRoles).toHaveBeenCalledWith(GUILD_ID, [roleId]);
     expect(interaction.member.roles.add).not.toHaveBeenCalled();
     expect(interaction.member.roles.remove).not.toHaveBeenCalled();
-    expect(embedText(replyEmbed(interaction))).toContain('Role no longer available');
+    expect(embedText(replyEmbed(interaction))).toContain('Role tidak tersedia lagi');
   });
 });
 
@@ -221,7 +230,7 @@ describe('handleRoleAdd', () => {
     await handleRoleAdd(interaction);
 
     expect(addRole).toHaveBeenCalledWith(GUILD_ID, role.id);
-    expect(embedText(replyEmbed(interaction))).toContain('That role is already in the list');
+    expect(embedText(replyEmbed(interaction))).toContain('Role sudah ada di daftar');
   });
 
   // Requirement 3.1
@@ -235,7 +244,7 @@ describe('handleRoleAdd', () => {
     await handleRoleAdd(interaction);
 
     expect(addRole).toHaveBeenCalledWith(GUILD_ID, role.id);
-    expect(embedText(replyEmbed(interaction))).toContain('Role added to the self-role list');
+    expect(embedText(replyEmbed(interaction))).toContain('Role ditambahkan ke daftar self-role');
   });
 });
 
@@ -251,7 +260,7 @@ describe('handleRoleRemove', () => {
     await handleRoleRemove(interaction);
 
     expect(removeRole).toHaveBeenCalledWith(GUILD_ID, role.id);
-    expect(embedText(replyEmbed(interaction))).toContain("That role isn't in the list");
+    expect(embedText(replyEmbed(interaction))).toContain('Role tidak ada di daftar');
   });
 
   // Requirement 4.1
@@ -265,7 +274,7 @@ describe('handleRoleRemove', () => {
     await handleRoleRemove(interaction);
 
     expect(removeRole).toHaveBeenCalledWith(GUILD_ID, role.id);
-    expect(embedText(replyEmbed(interaction))).toContain('Role removed from the self-role list');
+    expect(embedText(replyEmbed(interaction))).toContain('Role dihapus dari daftar self-role');
   });
 });
 
@@ -278,7 +287,7 @@ describe('non-admin permission gate (Requirement 6.2)', () => {
     await handleRoleAdd(interaction);
 
     expect(addRole).not.toHaveBeenCalled();
-    expect(embedText(replyEmbed(interaction))).toContain('You lack permission');
+    expect(embedText(replyEmbed(interaction))).toContain('Tidak berwenang');
   });
 
   test('handleRoleRemove: non-admin -> no-permission embed, removeRole not called', async () => {
@@ -289,7 +298,7 @@ describe('non-admin permission gate (Requirement 6.2)', () => {
     await handleRoleRemove(interaction);
 
     expect(removeRole).not.toHaveBeenCalled();
-    expect(embedText(replyEmbed(interaction))).toContain('You lack permission');
+    expect(embedText(replyEmbed(interaction))).toContain('Tidak berwenang');
   });
 
   test('handleRoleList: non-admin -> no-permission embed, getRoles not called', async () => {
@@ -299,7 +308,7 @@ describe('non-admin permission gate (Requirement 6.2)', () => {
     await handleRoleList(interaction);
 
     expect(getRoles).not.toHaveBeenCalled();
-    expect(embedText(replyEmbed(interaction))).toContain('You lack permission');
+    expect(embedText(replyEmbed(interaction))).toContain('Tidak berwenang');
   });
 });
 
@@ -314,7 +323,7 @@ describe('handleRoleList', () => {
     await handleRoleList(interaction);
 
     expect(getRoles).toHaveBeenCalledWith(GUILD_ID);
-    expect(embedText(replyEmbed(interaction))).toContain('The self-role list is empty');
+    expect(embedText(replyEmbed(interaction))).toContain('Daftar self-role kosong');
   });
 
   // Requirement 5.1
@@ -334,7 +343,7 @@ describe('handleRoleList', () => {
     await handleRoleList(interaction);
 
     const text = embedText(replyEmbed(interaction));
-    expect(text).toContain('Self-assignable roles');
+    expect(text).toContain('Daftar self-role');
     expect(text).toContain('<@&role-a>');
     expect(text).toContain('<@&role-b>');
   });

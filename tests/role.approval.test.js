@@ -15,24 +15,21 @@
  */
 
 jest.mock('../src/models/GuildRoles');
+// Mock GuildConfig so getApprovalConfig resolves with approval enabled.
+jest.mock('../src/models/GuildConfig', () => ({
+  getConfig: jest.fn().mockResolvedValue({
+    guildId: 'guild-1',
+    approverRoleId: 'approver-role',
+    approvalChannelId: 'approval-chan',
+    approvalEnabled: true,
+  }),
+}));
 
 const { getRoles, pruneRoles } = require('../src/models/GuildRoles');
 
 const APPROVAL_CHANNEL_ID = 'approval-chan';
 const APPROVER_ROLE_ID = 'approver-role';
 const GUILD_ID = 'guild-1';
-
-// Configure approval mode before requiring the command module (it reads env
-// lazily per-call via getApprovalConfig, so setting here is sufficient).
-beforeAll(() => {
-  process.env.APPROVAL_CHANNEL_ID = APPROVAL_CHANNEL_ID;
-  process.env.APPROVER_ROLE_ID = APPROVER_ROLE_ID;
-});
-
-afterAll(() => {
-  delete process.env.APPROVAL_CHANNEL_ID;
-  delete process.env.APPROVER_ROLE_ID;
-});
 
 const {
   handleRoleSelect,
@@ -121,7 +118,7 @@ describe('approval mode: handleRoleSelect', () => {
     expect(replyEmbedText(interaction)).toContain('Permintaan terkirim');
   });
 
-  it('does not send a request when the member already has the role', async () => {
+  it('removes the role instantly when the member already has it (no approval for removal)', async () => {
     const roleId = 'role-have';
     const role = makeRole({ id: roleId });
     const channel = makeChannel();
@@ -131,11 +128,14 @@ describe('approval mode: handleRoleSelect', () => {
       selectedId: roleId,
       memberRoleIds: [roleId],
     });
+    // Add a remove mock to the member.roles
+    interaction.member.roles.remove = jest.fn().mockResolvedValue(undefined);
 
     await handleRoleSelect(interaction);
 
     expect(channel.send).not.toHaveBeenCalled();
-    expect(replyEmbedText(interaction)).toContain('sudah punya role');
+    expect(interaction.member.roles.remove).toHaveBeenCalledWith(roleId);
+    expect(replyEmbedText(interaction)).toContain('Role dilepas');
   });
 });
 

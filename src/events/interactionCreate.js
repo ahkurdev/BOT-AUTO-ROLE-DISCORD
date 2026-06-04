@@ -18,7 +18,7 @@
  * Requirements: 1.1, 2.1, 3.1, 4.1, 5.1, 6.1
  */
 
-const { Events } = require('discord.js');
+const { Events, EmbedBuilder, MessageFlags } = require('discord.js');
 
 const {
   ROLE_SELECT_CUSTOM_ID,
@@ -36,19 +36,35 @@ const {
   handleDeposit,
   handleLivestock,
   handleAutocomplete,
+  handleResetButton,
+  RESET_CONFIRM_PREFIX,
+  RESET_CANCEL_PREFIX,
 } = require('../commands/stock');
 const { handleHelp } = require('../commands/help');
+const { handleConfig } = require('../commands/config-cmd');
+const { checkRateLimit } = require('../utils/rateLimit');
+const { COLORS, applyBranding } = require('../utils/shared');
+const log = require('../utils/logger');
+
+/**
+ * Build a "rate limited" ephemeral embed.
+ * @param {number} remainingMs
+ * @returns {EmbedBuilder}
+ */
+function rateLimitedEmbed(remainingMs) {
+  const seconds = Math.ceil(remainingMs / 1000);
+  return applyBranding(
+    new EmbedBuilder()
+      .setColor(COLORS.warning)
+      .setTitle('Terlalu cepat')
+      .setDescription(`Tunggu ${seconds} detik sebelum menggunakan perintah ini lagi.`),
+  );
+}
 
 module.exports = {
   name: Events.InteractionCreate,
   /**
-   * Route an incoming interaction to the appropriate `/role` handler.
-   *
-   * - `/role` chat-input commands dispatch on the subcommand name:
-   *   `me` → handleRoleMe, `add` → handleRoleAdd, `remove` → handleRoleRemove,
-   *   `list` → handleRoleList.
-   * - The `role-select` String Select Menu dispatches to handleRoleSelect.
-   * - Any other interaction is ignored (no-op).
+   * Route an incoming interaction to the appropriate handler.
    *
    * @param {import('discord.js').Interaction} interaction - the incoming interaction
    * @returns {Promise<unknown> | undefined}
@@ -66,26 +82,41 @@ module.exports = {
       return undefined;
     }
 
-    // Route `/role` slash-command subcommands (Req 1.1, 3.1, 4.1, 5.1, 6.1).
-    if (interaction.isChatInputCommand() && interaction.commandName === 'role') {
-      switch (interaction.options.getSubcommand()) {
-        case 'me':
-          return handleRoleMe(interaction);
-        case 'add':
-          return handleRoleAdd(interaction);
-        case 'remove':
-          return handleRoleRemove(interaction);
-        case 'list':
-          return handleRoleList(interaction);
-        default:
-          // Unknown subcommand: ignore (no-op).
-          return undefined;
-      }
-    }
-
-    // Route the stock commands (open to everyone for /wd and /dp).
+    // --- Chat input commands ---------------------------------------------------
     if (interaction.isChatInputCommand()) {
-      switch (interaction.commandName) {
+      const userId = interaction.user?.id || interaction.member?.id;
+      const cmd = interaction.commandName;
+
+      // Rate limit check (skip autocomplete and non-command interactions).
+      if (userId) {
+        const rl = checkRateLimit(userId, cmd);
+        if (rl.limited) {
+          log.debug('Rate limited', { userId, command: cmd, remainingMs: rl.remainingMs });
+          return interaction.reply({
+            embeds: [rateLimitedEmbed(rl.remainingMs)],
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+      }
+
+      // Route `/role` slash-command subcommands (Req 1.1, 3.1, 4.1, 5.1, 6.1).
+      if (cmd === 'role') {
+        switch (interaction.options.getSubcommand()) {
+          case 'me':
+            return handleRoleMe(interaction);
+          case 'add':
+            return handleRoleAdd(interaction);
+          case 'remove':
+            return handleRoleRemove(interaction);
+          case 'list':
+            return handleRoleList(interaction);
+          default:
+            return undefined;
+        }
+      }
+
+      // Route stock commands (open to everyone for /wd and /dp).
+      switch (cmd) {
         case 'wd':
           return handleWithdraw(interaction);
         case 'dp':
@@ -94,13 +125,20 @@ module.exports = {
           return handleLivestock(interaction);
         case 'help':
           return handleHelp(interaction);
+        case 'config':
+          return handleConfig(interaction);
         default:
           break;
       }
     }
 
     // Route the self-role String Select Menu selection (Req 2.1).
-    if (interaction.isStringSelectMenu() && interaction.customId === ROLE_SELECT_CUSTOM_ID) {
+    // Supports pagination: customId can be 'role-select' or 'role-select:0', etc.
+    if (
+      interaction.isStringSelectMenu() &&
+      (interaction.customId === ROLE_SELECT_CUSTOM_ID ||
+        interaction.customId.startsWith(`${ROLE_SELECT_CUSTOM_ID}:`))
+    ) {
       return handleRoleSelect(interaction);
     }
 
@@ -111,6 +149,15 @@ module.exports = {
         interaction.customId.startsWith(`${REJECT_BUTTON_PREFIX}:`))
     ) {
       return handleApprovalButton(interaction);
+    }
+
+    // Route livestock reset confirmation/cancel buttons.
+    if (
+      interaction.isButton() &&
+      (interaction.customId.startsWith(`${RESET_CONFIRM_PREFIX}:`) ||
+        interaction.customId.startsWith(`${RESET_CANCEL_PREFIX}:`))
+    ) {
+      return handleResetButton(interaction);
     }
 
     // Any other interaction type is ignored.

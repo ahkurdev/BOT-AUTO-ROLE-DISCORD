@@ -1,6 +1,7 @@
 'use strict';
 
 const { EmbedBuilder } = require('discord.js');
+const { BRAND_FOOTER, COLORS, applyBranding, branded } = require('./shared');
 
 /**
  * Centralized, pure embed builders for every Response_Embed the bot sends.
@@ -15,12 +16,7 @@ const { EmbedBuilder } = require('discord.js');
  *   - warning  : amber
  *   - info     : blurple
  */
-const COLORS = {
-  success: 0x57f287,
-  error: 0xed4245,
-  warning: 0xfee75c,
-  info: 0x5865f2,
-};
+// COLORS imported from ./shared
 
 /**
  * Render a role parameter as a human-friendly string.
@@ -57,49 +53,49 @@ function formatRole(role) {
 }
 
 /**
- * "✅ Role added" — the member selected a role they did not hold and it was assigned.
+ * "Role added" — the member selected a role they did not hold and it was assigned.
  * @param {object|string} role - the role that was assigned to the member
  * @returns {EmbedBuilder}
  */
 function roleAddedEmbed(role) {
   return new EmbedBuilder()
     .setColor(COLORS.success)
-    .setTitle('Role added')
-    .setDescription(`You now have ${formatRole(role)}.`);
+    .setTitle('Role ditambahkan')
+    .setDescription(`Kamu sekarang memiliki ${formatRole(role)}.`);
 }
 
 /**
- * "❌ Role removed" — the member selected a role they held and it was removed.
+ * "Role removed" — the member selected a role they held and it was removed.
  * @param {object|string} role - the role that was removed from the member
  * @returns {EmbedBuilder}
  */
 function roleRemovedEmbed(role) {
   return new EmbedBuilder()
     .setColor(COLORS.error)
-    .setTitle('Role removed')
-    .setDescription(`${formatRole(role)} has been removed from you.`);
+    .setTitle('Role dilepas')
+    .setDescription(`${formatRole(role)} telah dilepas dari kamu.`);
 }
 
 /**
- * "⚠️ That role is already in the list" — admin tried to add a role already present.
+ * "That role is already in the list" — admin tried to add a role already present.
  * @returns {EmbedBuilder}
  */
 function duplicateRoleEmbed() {
   return new EmbedBuilder()
     .setColor(COLORS.warning)
-    .setTitle('That role is already in the list')
-    .setDescription('No changes were made to the self-role list.');
+    .setTitle('Role sudah ada di daftar')
+    .setDescription('Tidak ada perubahan pada daftar self-role.');
 }
 
 /**
- * "⚠️ That role isn't in the list" — admin tried to remove a role that is absent.
+ * "That role isn't in the list" — admin tried to remove a role that is absent.
  * @returns {EmbedBuilder}
  */
 function notInListEmbed() {
   return new EmbedBuilder()
     .setColor(COLORS.warning)
-    .setTitle("That role isn't in the list")
-    .setDescription('No changes were made to the self-role list.');
+    .setTitle('Role tidak ada di daftar')
+    .setDescription('Tidak ada perubahan pada daftar self-role.');
 }
 
 /**
@@ -110,8 +106,8 @@ function notInListEmbed() {
 function addedConfirmEmbed(role) {
   return new EmbedBuilder()
     .setColor(COLORS.success)
-    .setTitle('Role added to the self-role list')
-    .setDescription(`${formatRole(role)} can now be self-assigned by members.`);
+    .setTitle('Role ditambahkan ke daftar self-role')
+    .setDescription(`${formatRole(role)} sekarang bisa diambil sendiri oleh member.`);
 }
 
 /**
@@ -122,8 +118,8 @@ function addedConfirmEmbed(role) {
 function removedConfirmEmbed(role) {
   return new EmbedBuilder()
     .setColor(COLORS.success)
-    .setTitle('Role removed from the self-role list')
-    .setDescription(`${formatRole(role)} can no longer be self-assigned by members.`);
+    .setTitle('Role dihapus dari daftar self-role')
+    .setDescription(`${formatRole(role)} tidak lagi bisa diambil sendiri oleh member.`);
 }
 
 /**
@@ -133,8 +129,8 @@ function removedConfirmEmbed(role) {
 function noRolesAvailableEmbed() {
   return new EmbedBuilder()
     .setColor(COLORS.info)
-    .setTitle('No self-assignable roles available')
-    .setDescription('There are no self-assignable roles to choose from right now.');
+    .setTitle('Tidak ada role tersedia')
+    .setDescription('Belum ada role yang bisa diambil sendiri saat ini.');
 }
 
 /**
@@ -144,8 +140,8 @@ function noRolesAvailableEmbed() {
 function listEmptyEmbed() {
   return new EmbedBuilder()
     .setColor(COLORS.info)
-    .setTitle('The self-role list is empty')
-    .setDescription('No roles have been added to the self-role list yet.');
+    .setTitle('Daftar self-role kosong')
+    .setDescription('Belum ada role yang ditambahkan ke daftar self-role.');
 }
 
 /**
@@ -156,11 +152,11 @@ function listEmptyEmbed() {
  */
 function listRolesEmbed(roles) {
   const list = Array.isArray(roles) ? roles : [];
-  const lines = list.map((role) => `• ${formatRole(role)}`);
+  const lines = list.map((role) => `- ${formatRole(role)}`);
   return new EmbedBuilder()
     .setColor(COLORS.info)
-    .setTitle('Self-assignable roles')
-    .setDescription(lines.length > 0 ? lines.join('\n') : 'No roles to display.');
+    .setTitle('Daftar self-role')
+    .setDescription(lines.length > 0 ? lines.join('\n') : 'Tidak ada role.');
 }
 
 /**
@@ -170,10 +166,10 @@ function listRolesEmbed(roles) {
 function botMissingPermissionEmbed() {
   return new EmbedBuilder()
     .setColor(COLORS.error)
-    .setTitle('Cannot manage roles')
+    .setTitle('Tidak bisa mengatur role')
     .setDescription(
-      'I do not have the **Manage Roles** permission, so I cannot change your roles. '
-        + 'Please ask an administrator to grant it.',
+      'Bot tidak memiliki permission **Manage Roles**, jadi tidak bisa mengubah role kamu. '
+        + 'Minta administrator untuk memberikan permission tersebut.',
     );
 }
 
@@ -184,9 +180,9 @@ function botMissingPermissionEmbed() {
 function hierarchyErrorEmbed() {
   return new EmbedBuilder()
     .setColor(COLORS.error)
-    .setTitle('Cannot manage this role')
+    .setTitle('Tidak bisa mengatur role ini')
     .setDescription(
-      'That role is positioned higher than my highest role, so I cannot manage it due to role hierarchy.',
+      'Role tersebut posisinya lebih tinggi dari role tertinggi bot, jadi tidak bisa dikelola karena hierarki role.',
     );
 }
 
@@ -197,8 +193,8 @@ function hierarchyErrorEmbed() {
 function roleNoLongerAvailableEmbed() {
   return new EmbedBuilder()
     .setColor(COLORS.warning)
-    .setTitle('Role no longer available')
-    .setDescription('That role no longer exists and has been removed from the self-role list.');
+    .setTitle('Role tidak tersedia lagi')
+    .setDescription('Role tersebut sudah tidak ada dan telah dihapus dari daftar self-role.');
 }
 
 /**
@@ -208,9 +204,9 @@ function roleNoLongerAvailableEmbed() {
 function noPermissionEmbed() {
   return new EmbedBuilder()
     .setColor(COLORS.error)
-    .setTitle('You lack permission')
+    .setTitle('Tidak berwenang')
     .setDescription(
-      'You need the **Administrator** or **Manage Roles** permission to use this command.',
+      'Kamu memerlukan permission **Administrator** atau **Manage Roles** untuk menggunakan perintah ini.',
     );
 }
 
@@ -333,34 +329,24 @@ function requestRejectedEmbed(role, approver, requester) {
   return embed;
 }
 
-const BRAND_FOOTER = 'Created by Allan';
+// BRAND_FOOTER, applyBranding, branded imported from ./shared
 
 /**
- * Apply the "Created by Allan" footer to an embed. If the embed already has a
- * footer (e.g. a timestamp label), the brand is appended rather than replacing
- * it. Idempotent: it won't add the brand twice.
- * @param {EmbedBuilder} embed
+ * Warning shown when `/role me` is used in a channel that is not in the allowed list.
+ * @param {string[]} allowedChannelIds - the IDs of channels where the command is allowed
  * @returns {EmbedBuilder}
  */
-function applyBranding(embed) {
-  const existing = embed && embed.data && embed.data.footer ? embed.data.footer.text : '';
-  if (existing) {
-    if (!existing.includes(BRAND_FOOTER)) {
-      embed.setFooter({ text: `${existing} • ${BRAND_FOOTER}` });
-    }
-  } else {
-    embed.setFooter({ text: BRAND_FOOTER });
-  }
-  return embed;
-}
-
-/**
- * Wrap an embed-returning builder so its result always carries the brand footer.
- * @param {(...args: any[]) => EmbedBuilder} fn
- * @returns {(...args: any[]) => EmbedBuilder}
- */
-function branded(fn) {
-  return (...args) => applyBranding(fn(...args));
+function wrongChannelEmbed(allowedChannelIds) {
+  const list =
+    Array.isArray(allowedChannelIds) && allowedChannelIds.length > 0
+      ? allowedChannelIds.map((id) => `<#${id}>`).join(', ')
+      : '_tidak ada_';
+  return new EmbedBuilder()
+    .setColor(COLORS.error)
+    .setTitle('Channel tidak diizinkan')
+    .setDescription(
+      `Perintah \`/role me\` hanya boleh digunakan di channel yang sudah ditentukan.\n\n**Channel yang diizinkan:** ${list}`,
+    );
 }
 
 module.exports = {
@@ -387,4 +373,5 @@ module.exports = {
   notApproverEmbed: branded(notApproverEmbed),
   requestApprovedEmbed: branded(requestApprovedEmbed),
   requestRejectedEmbed: branded(requestRejectedEmbed),
+  wrongChannelEmbed: branded(wrongChannelEmbed),
 };

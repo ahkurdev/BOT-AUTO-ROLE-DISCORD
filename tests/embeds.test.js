@@ -33,50 +33,48 @@ function embedText(embed) {
 }
 
 describe('embed text', () => {
-  // Requirement 2.1: assigning a role responds with "Role added".
-  test('roleAddedEmbed contains "Role added"', () => {
-    expect(embedText(roleAddedEmbed(roleStub))).toContain('Role added');
+  // Requirement 2.1: assigning a role responds with "Role ditambahkan".
+  test('roleAddedEmbed contains "Role ditambahkan"', () => {
+    expect(embedText(roleAddedEmbed(roleStub))).toContain('Role ditambahkan');
   });
 
-  // Requirement 2.2: removing a role responds with "Role removed".
-  test('roleRemovedEmbed contains "Role removed"', () => {
-    expect(embedText(roleRemovedEmbed(roleStub))).toContain('Role removed');
+  // Requirement 2.2: removing a role responds with "Role dilepas".
+  test('roleRemovedEmbed contains "Role dilepas"', () => {
+    expect(embedText(roleRemovedEmbed(roleStub))).toContain('Role dilepas');
   });
 
   // Requirement 3.2: adding a role already present responds with the duplicate warning.
-  test('duplicateRoleEmbed contains "That role is already in the list"', () => {
-    expect(embedText(duplicateRoleEmbed())).toContain('That role is already in the list');
+  test('duplicateRoleEmbed contains "Role sudah ada di daftar"', () => {
+    expect(embedText(duplicateRoleEmbed())).toContain('Role sudah ada di daftar');
   });
 
   // Requirement 4.2: removing a role that is absent responds with the not-in-list warning.
-  test("notInListEmbed contains \"That role isn't in the list\"", () => {
-    expect(embedText(notInListEmbed())).toContain("That role isn't in the list");
+  test('notInListEmbed contains "Role tidak ada di daftar"', () => {
+    expect(embedText(notInListEmbed())).toContain('Role tidak ada di daftar');
   });
 
   // Requirement 1.2: /role me with no available roles states that none are available.
   test('noRolesAvailableEmbed states that no self-assignable roles are available', () => {
     const text = embedText(noRolesAvailableEmbed());
-    expect(text).toContain('No self-assignable roles available');
-    expect(text).toContain('There are no self-assignable roles to choose from right now.');
+    expect(text).toContain('Tidak ada role tersedia');
   });
 
   // Requirement 5.3: /role list with an empty list states that the list is empty.
   test('listEmptyEmbed states that the self-role list is empty', () => {
     const text = embedText(listEmptyEmbed());
-    expect(text).toContain('The self-role list is empty');
-    expect(text).toContain('No roles have been added to the self-role list yet.');
+    expect(text).toContain('Daftar self-role kosong');
   });
 
   // The role-parameterized builders also accept a plain string role argument.
   test('roleAddedEmbed accepts a plain string role and still reports success', () => {
     const text = embedText(roleAddedEmbed('Cool'));
-    expect(text).toContain('Role added');
+    expect(text).toContain('Role ditambahkan');
     expect(text).toContain('Cool');
   });
 
   test('roleRemovedEmbed accepts a plain string role and still reports removal', () => {
     const text = embedText(roleRemovedEmbed('Cool'));
-    expect(text).toContain('Role removed');
+    expect(text).toContain('Role dilepas');
     expect(text).toContain('Cool');
   });
 });

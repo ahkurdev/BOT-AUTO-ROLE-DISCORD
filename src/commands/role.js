@@ -27,13 +27,13 @@ const {
   ButtonStyle,
   PermissionFlagsBits,
   MessageFlags,
-  EmbedBuilder,
 } = require('discord.js');
 
 const { partitionRoles } = require('../utils/staleRoles');
 const { decideToggle } = require('../utils/roleToggle');
 const { checkManageable, canManageRole } = require('../utils/roleValidation');
 const { isAuthorizedAdmin } = require('../utils/permissions');
+const { genericErrorEmbed, replyEphemeral } = require('../utils/shared');
 const {
   roleAddedEmbed,
   roleRemovedEmbed,
@@ -54,8 +54,10 @@ const {
   notApproverEmbed,
   requestApprovedEmbed,
   requestRejectedEmbed,
+  wrongChannelEmbed,
 } = require('../utils/embeds');
 const { getRoles, addRole, removeRole, pruneRoles } = require('../models/GuildRoles');
+const { getConfig: getGuildConfig } = require('../models/GuildConfig');
 
 /** customId used for the self-role String Select Menu. */
 const ROLE_SELECT_CUSTOM_ID = 'role-select';
@@ -64,23 +66,25 @@ const ROLE_SELECT_CUSTOM_ID = 'role-select';
 const APPROVE_BUTTON_PREFIX = 'role-approve';
 const REJECT_BUTTON_PREFIX = 'role-reject';
 
+/** Maximum options per Discord StringSelectMenu. */
+const MAX_OPTIONS_PER_MENU = 25;
+
 /**
- * Read the approval-flow configuration from the environment.
+ * Read the approval-flow configuration for a guild.
  *
- * Approval mode is ENABLED only when both `APPROVAL_CHANNEL_ID` and
- * `APPROVER_ROLE_ID` are set. When either is missing, the bot falls back to the
- * original instant-toggle behaviour so existing deployments are unaffected.
+ * Reads from the per-guild DB config first, falling back to `.env` for
+ * backward compatibility. Approval mode is ENABLED only when both
+ * `approvalChannelId` and at least one `approverRoleId` are set.
  *
- * @param {Record<string, string|undefined>} [env=process.env]
- * @returns {{ enabled: boolean, channelId: string, approverRoleId: string }}
+ * @param {string} guildId
+ * @returns {Promise<{ enabled: boolean, channelId: string, approverRoleIds: string[] }>}
  */
-function getApprovalConfig(env = process.env) {
-  const channelId = (env.APPROVAL_CHANNEL_ID || '').trim();
-  const approverRoleId = (env.APPROVER_ROLE_ID || '').trim();
+async function getApprovalConfig(guildId) {
+  const cfg = await getGuildConfig(guildId);
   return {
-    enabled: channelId !== '' && approverRoleId !== '',
-    channelId,
-    approverRoleId,
+    enabled: cfg.approvalEnabled,
+    channelId: cfg.approvalChannelId || '',
+    approverRoleIds: cfg.approverRoleIds || [],
   };
 }
 
@@ -119,41 +123,13 @@ const data = new SlashCommandBuilder()
     sub.setName('list').setDescription('List the current self-assignable roles'));
 
 /**
- * Build a safe, generic failure embed used when a Discord side effect throws.
- *
- * @returns {EmbedBuilder}
- */
-function genericErrorEmbed() {
-  return new EmbedBuilder()
-    .setColor(0xed4245)
-    .setTitle('Something went wrong')
-    .setDescription('I could not complete that action. Please try again in a moment.')
-    .setFooter({ text: 'Created by Allan' });
-}
-
-/**
- * Reply to an interaction ephemerally, falling back to `followUp` if the
- * interaction has already been replied to or deferred.
- *
- * @param {import('discord.js').RepliableInteraction} interaction
- * @param {EmbedBuilder} embed
- * @returns {Promise<unknown>}
- */
-function replyEphemeral(interaction, embed) {
-  const payload = { embeds: [embed], flags: MessageFlags.Ephemeral };
-  if (interaction.replied || interaction.deferred) {
-    return interaction.followUp(payload);
-  }
-  return interaction.reply(payload);
-}
-
-/**
  * Handle `/role me`.
  *
  * Reads the stored self-role ids, partitions them against the roles that
  * currently exist in the guild, prunes any stale ids from the datastore, and
  * either reports that no roles are available or presents a String Select Menu
- * of the still-valid roles. All replies are ephemeral.
+ * of the still-valid roles. When >25 roles exist, multiple select menus are
+ * used (Discord allows up to 5 action rows per message, so up to 125 roles).
  *
  * Requirements: 1.1, 1.2, 1.3, 1.4, 6.1
  *
@@ -162,6 +138,23 @@ function replyEphemeral(interaction, embed) {
  */
 async function handleRoleMe(interaction) {
   const guildId = interaction.guild.id;
+
+  // Channel restriction check: if roleMeChannelIds is configured, only allow
+  // the command in those channels. Warn the user and auto-delete after 5 s.
+  const cfg = await getGuildConfig(guildId);
+  const allowedChannelIds = cfg.roleMeChannelIds || [];
+  if (allowedChannelIds.length > 0 && !allowedChannelIds.includes(interaction.channelId)) {
+    const reply = await interaction.reply({
+      embeds: [wrongChannelEmbed(allowedChannelIds)],
+      flags: MessageFlags.Ephemeral,
+      fetchReply: true,
+    });
+    // Auto-delete the ephemeral reply after 5 seconds (best-effort).
+    setTimeout(() => {
+      interaction.deleteReply().catch(() => {});
+    }, 5000);
+    return reply;
+  }
 
   const storedIds = await getRoles(guildId);
   const existingRoleIds = new Set(interaction.guild.roles.cache.keys());
@@ -186,15 +179,25 @@ async function handleRoleMe(interaction) {
     };
   });
 
-  const selectMenu = new StringSelectMenuBuilder()
-    .setCustomId(ROLE_SELECT_CUSTOM_ID)
-    .setPlaceholder('Select a role to add or remove')
-    .addOptions(options);
-
-  const row = new ActionRowBuilder().addComponents(selectMenu);
+  // Split into multiple select menus if >25 roles (Discord limit).
+  const rows = [];
+  const totalMenus = Math.min(Math.ceil(options.length / MAX_OPTIONS_PER_MENU), 5);
+  for (let i = 0; i < totalMenus; i++) {
+    const chunk = options.slice(i * MAX_OPTIONS_PER_MENU, (i + 1) * MAX_OPTIONS_PER_MENU);
+    const customId = totalMenus === 1 ? ROLE_SELECT_CUSTOM_ID : `${ROLE_SELECT_CUSTOM_ID}:${i}`;
+    const placeholder =
+      totalMenus > 1
+        ? `Roles (${i * MAX_OPTIONS_PER_MENU + 1}–${i * MAX_OPTIONS_PER_MENU + chunk.length})`
+        : 'Select a role to add or remove';
+    const selectMenu = new StringSelectMenuBuilder()
+      .setCustomId(customId)
+      .setPlaceholder(placeholder)
+      .addOptions(chunk);
+    rows.push(new ActionRowBuilder().addComponents(selectMenu));
+  }
 
   return interaction.reply({
-    components: [row],
+    components: rows,
     flags: MessageFlags.Ephemeral,
   });
 }
@@ -202,13 +205,12 @@ async function handleRoleMe(interaction) {
 /**
  * Handle a selection from the self-role String Select Menu (`role-select`).
  *
- * Re-resolves the selected role from the guild cache. If it no longer exists,
- * the id is pruned from the datastore and the member is told the role is no
- * longer available. Otherwise the bot's manageability is checked (Manage Roles
- * permission + role hierarchy); on a guard failure the matching error embed is
- * sent and no role change is made. When manageable, the role is toggled on the
- * member based on their current roles and a confirmation embed is sent. All
- * replies are ephemeral; the role mutation is wrapped in try/catch.
+ * In approval mode:
+ *   - If the member DOES NOT have the role → send a request (needs approval).
+ *   - If the member ALREADY HAS the role → remove it instantly (no approval
+ *     needed to drop a role you already hold).
+ *
+ * In instant mode: toggle the role on/off.
  *
  * Requirements: 2.1, 2.2, 2.3, 2.4, 2.5
  *
@@ -251,10 +253,19 @@ async function handleRoleSelect(interaction) {
     return replyEphemeral(interaction, genericErrorEmbed());
   }
 
-  // Approval mode: instead of toggling instantly, send a request to the
-  // approval channel for an approver to Accept/Reject.
-  const approval = getApprovalConfig();
+  // Approval mode check.
+  const approval = await getApprovalConfig(guildId);
   if (approval.enabled) {
+    // In approval mode: if the member already holds the role, just remove it
+    // (no approval needed for removal). Otherwise submit a request.
+    if (interaction.member.roles.cache.has(role.id)) {
+      try {
+        await interaction.member.roles.remove(selectedId);
+        return replyEphemeral(interaction, roleRemovedEmbed(role));
+      } catch (_err) {
+        return replyEphemeral(interaction, genericErrorEmbed());
+      }
+    }
     return submitRoleRequest(interaction, role, approval);
   }
 
@@ -268,7 +279,7 @@ async function handleRoleSelect(interaction) {
     }
     await interaction.member.roles.remove(selectedId);
     return replyEphemeral(interaction, roleRemovedEmbed(role)); // Req 2.2
-  } catch (err) {
+  } catch (_err) {
     // Discord API error during the role mutation — reply safely, assume no
     // partial state.
     return replyEphemeral(interaction, genericErrorEmbed());
@@ -313,13 +324,13 @@ async function submitRoleRequest(interaction, role, approval) {
     const row = new ActionRowBuilder().addComponents(approveButton, rejectButton);
 
     await channel.send({
-      content: `<@&${approval.approverRoleId}>`,
+      content: approval.approverRoleIds.map((id) => `<@&${id}>`).join(' '),
       embeds: [roleRequestEmbed(interaction.member, role)],
       components: [row],
     });
 
     return replyEphemeral(interaction, requestSubmittedEmbed(role));
-  } catch (err) {
+  } catch (_err) {
     return replyEphemeral(interaction, genericErrorEmbed());
   }
 }
@@ -337,13 +348,16 @@ async function submitRoleRequest(interaction, role, approval) {
  * @returns {Promise<unknown>}
  */
 async function handleApprovalButton(interaction) {
-  const approval = getApprovalConfig();
+  const guildId = interaction.guild.id;
+  const approval = await getApprovalConfig(guildId);
   const [prefix, requesterId, roleId] = interaction.customId.split(':');
   const approve = prefix === APPROVE_BUTTON_PREFIX;
 
-  // Only members with the approver role may resolve the request.
-  const approverRoleId = approval.approverRoleId;
-  if (!approverRoleId || !interaction.member.roles.cache.has(approverRoleId)) {
+  // Only members with one of the approver roles may resolve the request.
+  const { approverRoleIds } = approval;
+  const hasApproverRole = approverRoleIds.length > 0 &&
+    approverRoleIds.some((id) => interaction.member.roles.cache.has(id));
+  if (!hasApproverRole) {
     return replyEphemeral(interaction, notApproverEmbed());
   }
 
@@ -366,7 +380,7 @@ async function handleApprovalButton(interaction) {
   let requester = null;
   try {
     requester = await interaction.guild.members.fetch(requesterId);
-  } catch (err) {
+  } catch (_err) {
     requester = null;
   }
 
@@ -385,7 +399,7 @@ async function handleApprovalButton(interaction) {
     }
     try {
       await requester.roles.add(roleId);
-    } catch (err) {
+    } catch (_err) {
       await safeDisableMessage(interaction, genericErrorEmbed());
       return undefined;
     }
@@ -415,12 +429,12 @@ async function handleApprovalButton(interaction) {
 async function safeDisableMessage(interaction, embed) {
   try {
     await interaction.update({ embeds: [embed], components: [] });
-  } catch (err) {
+  } catch (_err) {
     // If the interaction was already acknowledged or the message is gone, fall
     // back to editing the message directly; ignore any further failure.
     try {
       await interaction.message.edit({ embeds: [embed], components: [] });
-    } catch (innerErr) {
+    } catch (_innerErr) {
       // give up silently
     }
   }
@@ -436,7 +450,7 @@ async function safeDisableMessage(interaction, embed) {
 async function notifyRequester(requester, embed) {
   try {
     await requester.send({ embeds: [embed] });
-  } catch (err) {
+  } catch (_err) {
     // The requester may have DMs closed; this is non-fatal.
   }
 }
@@ -485,7 +499,7 @@ async function handleRoleAdd(interaction) {
       return replyEphemeral(interaction, duplicateRoleEmbed());
     }
     return replyEphemeral(interaction, genericErrorEmbed());
-  } catch (err) {
+  } catch (_err) {
     return replyEphemeral(interaction, genericErrorEmbed());
   }
 }
@@ -526,7 +540,7 @@ async function handleRoleRemove(interaction) {
       return replyEphemeral(interaction, notInListEmbed());
     }
     return replyEphemeral(interaction, genericErrorEmbed());
-  } catch (err) {
+  } catch (_err) {
     return replyEphemeral(interaction, genericErrorEmbed());
   }
 }
@@ -575,7 +589,7 @@ async function handleRoleList(interaction) {
     );
 
     return replyEphemeral(interaction, listRolesEmbed(roles)); // Req 5.1
-  } catch (err) {
+  } catch (_err) {
     return replyEphemeral(interaction, genericErrorEmbed());
   }
 }
