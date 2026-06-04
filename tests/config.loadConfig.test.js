@@ -27,6 +27,7 @@ describe('loadConfig', () => {
       discordToken: 'token-abc',
       mongoUri: 'mongodb://localhost:27017/selfroles',
       guildId: '123456789012345678',
+      clientId: null,
     });
   });
 

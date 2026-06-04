@@ -42,6 +42,9 @@ jest.mock('mongoose', () => ({
     orderLog.push('connect');
     return Promise.resolve();
   }),
+  connection: {
+    on: jest.fn(),
+  },
 }));
 
 jest.mock('discord.js', () => {

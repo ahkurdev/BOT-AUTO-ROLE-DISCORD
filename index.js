@@ -36,6 +36,8 @@ const { Client, GatewayIntentBits } = require('discord.js');
 const { loadConfig, ConfigError } = require('./src/config');
 const ready = require('./src/events/ready');
 const interactionCreate = require('./src/events/interactionCreate');
+const messageCreate = require('./src/events/messageCreate');
+const log = require('./src/utils/logger');
 
 /**
  * Optionally override the DNS servers Node uses to resolve hostnames.
@@ -82,12 +84,48 @@ async function autoDeployCommands(env = process.env) {
     const { deploy } = require('./deploy-commands');
     const registered = await deploy({ env });
     const count = Array.isArray(registered) ? registered.length : 1;
-    console.log(`Auto-deploy: registered ${count} guild command(s).`);
+    log.info(`Auto-deploy: registered ${count} guild command(s).`);
   } catch (err) {
-    console.error(
-      `Auto-deploy skipped: ${err && err.message ? err.message : err}`,
-    );
+    log.warn(`Auto-deploy skipped: ${err && err.message ? err.message : err}`);
   }
+}
+
+/**
+ * Set up Mongoose connection event listeners so we know if the database
+ * connection drops or reconnects while the bot is running.
+ */
+function setupMongooseListeners() {
+  mongoose.connection.on('error', (err) => {
+    log.error('MongoDB connection error', { error: err.message || err });
+  });
+  mongoose.connection.on('disconnected', () => {
+    log.warn('MongoDB disconnected');
+  });
+  mongoose.connection.on('reconnected', () => {
+    log.info('MongoDB reconnected');
+  });
+}
+
+/**
+ * Gracefully shut down the bot: destroy the Discord client, disconnect
+ * MongoDB, then exit.
+ *
+ * @param {import('discord.js').Client} client
+ * @param {string} signal — the signal that triggered the shutdown
+ */
+async function shutdown(client, signal) {
+  log.info(`Received ${signal}. Shutting down gracefully...`);
+  try {
+    client.destroy();
+  } catch (_e) {
+    // ignore
+  }
+  try {
+    await mongoose.disconnect();
+  } catch (_e) {
+    // ignore
+  }
+  process.exit(0);
 }
 
 /**
@@ -114,19 +152,30 @@ async function start() {
   await autoDeployCommands();
 
   // 2. Connect MongoDB before anything that could process interactions (8.4).
+  setupMongooseListeners();
   await mongoose.connect(config.mongoUri);
 
   // 3. Create the gateway client with the intents required to manage roles.
   const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMembers,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent,
+    ],
   });
 
   // 4. Register the event handlers.
   client.once(ready.name, ready.execute);
   client.on(interactionCreate.name, interactionCreate.execute);
+  client.on(messageCreate.name, messageCreate.execute);
 
   // 5. Log in to Discord.
   await client.login(config.discordToken);
+
+  // 6. Register graceful shutdown handlers.
+  process.on('SIGINT', () => shutdown(client, 'SIGINT'));
+  process.on('SIGTERM', () => shutdown(client, 'SIGTERM'));
 
   return client;
 }
@@ -141,16 +190,26 @@ async function main() {
   } catch (error) {
     if (error instanceof ConfigError) {
       // Configuration problem: surface exactly which variable is missing (8.3).
-      console.error(error.message);
+      log.error(error.message);
     } else {
       // Mongo connection failure or any other startup error (8.4).
-      console.error(`Failed to start bot: ${error && error.message ? error.message : error}`);
+      log.error(`Failed to start bot: ${error && error.message ? error.message : error}`);
     }
     process.exit(1);
   }
 }
 
 module.exports = { start, main, applyDnsServers, autoDeployCommands };
+
+// Global error handlers: catch unhandled promise rejections and uncaught
+// exceptions so the bot does not crash silently.
+process.on('unhandledRejection', (err) => {
+  log.error('Unhandled Rejection', { error: err && err.message ? err.message : String(err) });
+});
+process.on('uncaughtException', (err) => {
+  log.error('Uncaught Exception — exiting', { error: err && err.message ? err.message : String(err) });
+  process.exit(1);
+});
 
 // Only run the bot when this file is executed directly (e.g. `node index.js`).
 // When required by a test, nothing runs, keeping require-time side-effect free.

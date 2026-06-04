@@ -84,6 +84,7 @@ function loadConfig(env = process.env) {
     discordToken: env.DISCORD_TOKEN,
     mongoUri: env.MONGODB_URI,
     guildId: env.GUILD_ID,
+    clientId: (env.CLIENT_ID || '').trim() || null,
   };
 }
 

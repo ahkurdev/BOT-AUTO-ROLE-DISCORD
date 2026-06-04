@@ -25,6 +25,7 @@ const { loadConfig } = require('./src/config');
 const { data } = require('./src/commands/role');
 const { wdData, dpData, livestockData } = require('./src/commands/stock');
 const { data: helpData } = require('./src/commands/help');
+const { data: configData } = require('./src/commands/config-cmd');
 
 /**
  * Build the array of command JSON bodies to register.
@@ -38,6 +39,7 @@ function buildCommands() {
     dpData.toJSON(),
     livestockData.toJSON(),
     helpData.toJSON(),
+    configData.toJSON(),
   ];
 }
 
