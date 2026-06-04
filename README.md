@@ -4,22 +4,27 @@ Bot Discord serbaguna untuk **self-role**, **manajemen stok (withdraw/deposit)**
 
 ## Fitur
 
-- **Self-role** — anggota mengambil/melepas role sendiri lewat menu (`/role me`); approver mengelola daftar role.
-- **Approval role (opsional)** — permintaan role dikirim ke channel approval dengan tombol Accept/Reject.
+- **Self-role** — Anggota mengambil/melepas role sendiri lewat menu (`/role me`); administrator mengelola daftar role.
+- **Approval role (opsional)** — Permintaan role dikirim ke channel approval dengan tombol Accept/Reject.
+- **Approver multi-role** — Mengizinkan 1 hingga 3 role approver berbeda per-guild untuk memproses persetujuan role dan manajemen stok.
+- **Pembatasan channel** — `/role me`, `/wd`, dan `/dp` dapat dibatasi ke channel-channel tertentu melalui konfigurasi.
+- **Auto-delete pesan biasa** — Pesan teks biasa di channel khusus command (role me, wd, dp) akan **otomatis dihapus** dan pengirim diberikan peringatan sementara (8 detik) sebelum dihapus kembali secara bersih tanpa emoji.
 - **Withdraw / Deposit** — `/wd` dan `/dp` untuk semua anggota, dengan pencocokan kategori otomatis.
-- **Live Stock board** — papan stok yang otomatis diperbarui setiap transaksi, angka diformat dengan pemisah ribuan (mis. `14.894.829`).
-- **Log transaksi** — setiap withdraw/deposit dapat dicatat ke channel log.
-- **Pembatasan channel** — `/wd` dan `/dp` dapat dikunci ke channel tertentu.
-- **Presence** — status bot ("Playing/Watching ...") yang dapat dirotasi.
-- **Auto-deploy** — slash command otomatis terdaftar saat bot start.
+- **Live Stock board** — Papan stok yang otomatis diperbarui setiap transaksi, angka diformat dengan pemisah ribuan (mis. `14.894.829`).
+- **Log transaksi** — Setiap withdraw/deposit dapat dicatat ke channel log dan tersimpan di database (auto-hapus 90 hari).
+- **Presence** — Status bot ("Playing/Watching ...") yang dapat dirotasi.
+- **Auto-deploy** — Slash command otomatis terdaftar saat bot start.
+- **Rate limiting** — Anti-spam per user per command (cooldown 3-5 detik).
+- **Konfigurasi per-guild** — Approver role, approval channel, dan pembatasan channel diatur per server lewat `/config`.
+- **Graceful shutdown** — Koneksi MongoDB and Discord ditutup bersih saat bot dimatikan.
 
 ## Persyaratan
 
 - Node.js 18+
 - MongoDB (lokal atau Atlas)
 - Aplikasi bot di [Discord Developer Portal](https://discord.com/developers/applications)
-  - **Server Members Intent** harus diaktifkan (Bot → Privileged Gateway Intents).
-  - Bot diundang dengan scope `bot` dan `applications.commands`, serta permission **Manage Roles**.
+  - **Server Members Intent** dan **Message Content Intent** harus diaktifkan (Bot > Privileged Gateway Intents).
+  - Bot diundang dengan scope `bot` dan `applications.commands`, serta permission **Manage Roles** dan **Manage Messages**.
 
 ## Instalasi
 
@@ -43,108 +48,78 @@ cp .env.example .env
 | `CLIENT_ID` | ya | Application (client) ID — dipakai untuk registrasi command. |
 | `GUILD_ID` | ya | ID server tempat command didaftarkan. |
 | `MONGODB_URI` | ya | Connection string MongoDB. |
-| `APPROVAL_CHANNEL_ID` | tidak | Channel permintaan approval role (aktifkan mode approval bersama `APPROVER_ROLE_ID`). |
-| `APPROVER_ROLE_ID` | tidak | Role yang boleh menyetujui/menolak & mengelola stok. |
+| `APPROVAL_CHANNEL_ID` | tidak | Channel permintaan approval role. Bisa juga diatur per-guild via `/config`. |
+| `APPROVER_ROLE_ID` | tidak | Legacy approver role ID (fallback). Sebaiknya atur per-guild via `/config`. |
 | `DNS_SERVERS` | tidak | DNS server untuk Node (mis. `8.8.8.8,1.1.1.1`) bila `mongodb+srv://` gagal resolve. |
 | `BOT_ACTIVITY` | tidak | Teks status; beberapa teks dipisah `\|` akan dirotasi. |
 | `BOT_ACTIVITY_TYPE` | tidak | `Playing` \| `Watching` \| `Listening` \| `Competing` (default `Playing`). |
 | `BOT_STATUS` | tidak | `online` \| `idle` \| `dnd` \| `invisible` (default `online`). |
 | `BOT_ACTIVITY_ROTATE_MS` | tidak | Interval rotasi status (min 15000, default 30000). |
 | `AUTO_DEPLOY_COMMANDS` | tidak | Daftarkan command otomatis saat start (default `true`; set `false` untuk manual). |
-
-> **Keamanan:** jangan commit file `.env`. File ini sudah masuk `.gitignore`.
+| `LOG_LEVEL` | tidak | Level log: `debug` \| `info` \| `warn` \| `error` (default `info`). |
 
 ## Menjalankan
 
 ```bash
-# daftarkan slash command secara manual (opsional bila AUTO_DEPLOY_COMMANDS=true)
+# Daftarkan slash command secara manual
 npm run deploy
 
-# jalankan bot
+# Jalankan bot
 npm start
 
-# jalankan test
+# Jalankan test
 npm test
 ```
-
-Saat start, bot akan: validasi konfigurasi → (opsional) daftarkan command → konek MongoDB → login Discord.
 
 ## Daftar Perintah
 
 ### Self-Role
+
 | Perintah | Akses | Keterangan |
 |---|---|---|
-| `/role me` | Semua | Buka menu untuk ambil/lepas role sendiri. |
-| `/role add <role>` | Approver | Tambah role ke daftar self-role. |
-| `/role remove <role>` | Approver | Hapus role dari daftar. |
-| `/role list` | Approver | Lihat daftar role yang tersedia. |
+| `/role me` | Semua | Buka menu untuk ambil/lepas role sendiri. Hanya dapat digunakan di channel yang telah diizinkan. |
+| `/role add <role>` | Admin | Tambah role ke daftar self-role. |
+| `/role remove <role>` | Admin | Hapus role dari daftar. |
+| `/role list` | Admin | Lihat daftar role yang tersedia. |
 
-Bila mode approval aktif, memilih role di `/role me` akan mengirim permintaan ke channel approval; role baru diberikan setelah approver menekan **Accept**.
+### Stock (Semua Anggota)
 
-### Stock (semua anggota)
 | Perintah | Keterangan |
 |---|---|
-| `/wd <jumlah> <item> [kategori]` | Tarik item dari stok. Kategori otomatis dicari; sebutkan hanya bila nama item ada di beberapa kategori. |
-| `/dp <jumlah> <item> [kategori]` | Setor item. Item baru dibuat di kategori yang disebut; kategori baru otomatis dibuat bila belum ada. Item yang sudah ada cukup tanpa kategori. |
+| `/wd <jumlah> <item> [kategori]` | Tarik item dari stok. Hanya dapat digunakan di channel yang diizinkan (jika diatur). |
+| `/dp <jumlah> <item> [kategori]` | Setor item. Hanya dapat digunakan di channel yang diizinkan (jika diatur). |
 
-Contoh:
-- `/wd 200 Drill`
-- `/dp 200 Nail Gun Alat Rampok`
-- `/dp 50 Drill`
+### Live Stock (Approver)
 
-### Live Stock (approver)
 | Perintah | Keterangan |
 |---|---|
 | `/livestock channel <channel>` | Pasang papan Live Stock di channel. |
 | `/livestock log <channel>` | Set channel log transaksi. |
-| `/livestock setwd <channel>` | Batasi `/wd` hanya di channel itu. |
-| `/livestock setdp <channel>` | Batasi `/dp` hanya di channel itu. |
 | `/livestock create category <nama> [emoji]` | Buat kategori baru. |
 | `/livestock delete category <nama>` | Hapus kategori. |
 | `/livestock item add <kategori> <nama> [jumlah]` | Tambah item ke kategori. |
 | `/livestock item remove <kategori> <nama>` | Hapus item dari kategori. |
 | `/livestock refresh` | Perbarui tampilan papan. |
+| `/livestock reset` | Reset semua jumlah stok ke 0 (dengan konfirmasi). |
+| `/livestock history [user] [jumlah]` | Lihat riwayat transaksi terakhir. |
 
-### Lain-lain
-| Perintah | Akses | Keterangan |
-|---|---|---|
-| `/help` | Semua | Tampilkan panduan perintah. |
+### Konfigurasi (Admin)
 
-## Struktur Proyek
-
-```
-index.js              Entry point (config → deploy → Mongo → login)
-deploy-commands.js    Registrasi slash command ke guild
-src/
-  commands/           Definisi & handler command (role, stock, help)
-  events/             ready (presence) & interactionCreate (router)
-  models/             Model + repository Mongoose (GuildRoles, GuildStock)
-  utils/              Logika murni & embed builder
-tests/                Unit & property-based test (Jest + fast-check)
-```
-
-## Pengujian
-
-Proyek memakai Jest dengan property-based testing (fast-check) dan `mongodb-memory-server` untuk test repository.
-
-```bash
-npm test
-```
-
-## Deployment (Wispbyte / Pterodactyl)
-
-1. Set environment variable di panel (sama seperti `.env`, karena `.env` tidak ikut repo).
-2. Pastikan **Server Members Intent** aktif dan IP server di-whitelist di MongoDB Atlas (Network Access).
-3. Startup command: `node index.js`. Command akan otomatis terdaftar (`AUTO_DEPLOY_COMMANDS=true`).
-
-## Catatan Keamanan
-
-- Jangan pernah membagikan `DISCORD_TOKEN` atau `MONGODB_URI`. Bila pernah terekspos, rotasi token bot dan ganti password database.
-- Untuk hosting dengan IP dinamis, whitelist Atlas `0.0.0.0/0` mempermudah koneksi tetapi mengurangi lapisan keamanan — pastikan kredensial database kuat.
-
-## Lisensi
-
-MIT
+| Perintah | Keterangan |
+|---|---|
+| `/config approver add <role>` | Tambah role approver baru (maks 3). |
+| `/config approver remove <role>` | Hapus role approver dari daftar. |
+| `/config approval-channel <channel>` | Set channel approval role. |
+| `/config role-channel add <channel>` | Batasi perintah `/role me` hanya di channel ini. |
+| `/config role-channel remove <channel>` | Hapus batasan channel `/role me`. |
+| `/config role-channel list` | Tampilkan daftar channel yang diizinkan untuk `/role me`. |
+| `/config wd-channel add <channel>` | Batasi perintah `/wd` hanya di channel ini. |
+| `/config wd-channel remove <channel>` | Hapus batasan channel `/wd`. |
+| `/config wd-channel list` | Tampilkan daftar channel yang diizinkan untuk `/wd`. |
+| `/config dp-channel add <channel>` | Batasi perintah `/dp` hanya di channel ini. |
+| `/config dp-channel remove <channel>` | Hapus batasan channel `/dp`. |
+| `/config dp-channel list` | Tampilkan daftar channel yang diizinkan untuk `/dp`. |
+| `/config show` | Tampilkan semua konfigurasi server saat ini. |
 
 ---
 
