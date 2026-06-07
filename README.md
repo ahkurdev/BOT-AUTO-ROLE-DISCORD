@@ -1,21 +1,19 @@
 # Bot Shellby
 
-Bot Discord serbaguna untuk **self-role**, **manajemen stok (withdraw/deposit)** dengan papan **Live Stock** real-time, dan alur **persetujuan role** opsional. Dibangun dengan Node.js + discord.js v14, data tersimpan per-guild di MongoDB.
+Bot Discord serbaguna untuk **self-role & Penanggung Jawab (PJ)**, **manajemen stok (withdraw/deposit)** dengan papan **Live Stock** real-time. Dibangun dengan Node.js + discord.js v14, data tersimpan per-guild di MongoDB.
 
 ## Fitur
 
-- **Self-role** — Anggota mengambil/melepas role sendiri lewat menu (`/role me`); administrator mengelola daftar role.
-- **Approval role (opsional)** — Permintaan role dikirim ke channel approval dengan tombol Accept/Reject.
-- **Approver multi-role** — Mengizinkan 1 hingga 3 role approver berbeda per-guild untuk memproses persetujuan role dan manajemen stok.
+- **Self-role & Penanggung Jawab** — Anggota mengambil/melepas role sendiri lewat menu sekaligus menunjuk penanggung jawabnya via `/role me pj:@User`. Daftar kepemilikan role dan PJ akan otomatis terkelola dalam bentuk embed publik.
 - **Pembatasan channel** — `/role me`, `/wd`, dan `/dp` dapat dibatasi ke channel-channel tertentu melalui konfigurasi.
-- **Auto-delete pesan biasa** — Pesan teks biasa di channel khusus command (role me, wd, dp) akan **otomatis dihapus** dan pengirim diberikan peringatan sementara (8 detik) sebelum dihapus kembali secara bersih tanpa emoji.
+- **Auto-delete pesan biasa** — Pesan teks biasa di channel khusus command (role me, wd, dp) akan **otomatis dihapus** dan pengirim diberikan peringatan sementara (8 detik) sebelum dihapus kembali secara bersih tanpa emoji (pesan tutorial dikecualikan).
 - **Withdraw / Deposit** — `/wd` dan `/dp` untuk semua anggota, dengan pencocokan kategori otomatis.
 - **Live Stock board** — Papan stok yang otomatis diperbarui setiap transaksi, angka diformat dengan pemisah ribuan (mis. `14.894.829`).
 - **Log transaksi** — Setiap withdraw/deposit dapat dicatat ke channel log dan tersimpan di database (auto-hapus 90 hari).
 - **Presence** — Status bot ("Playing/Watching ...") yang dapat dirotasi.
 - **Auto-deploy** — Slash command otomatis terdaftar saat bot start.
 - **Rate limiting** — Anti-spam per user per command (cooldown 3-5 detik).
-- **Konfigurasi per-guild** — Approver role, approval channel, dan pembatasan channel diatur per server lewat `/config`.
+- **Konfigurasi per-guild** — Approver role, channel list PJ, channel tutorial, dan pembatasan channel diatur per server lewat `/config`.
 - **Graceful shutdown** — Koneksi MongoDB and Discord ditutup bersih saat bot dimatikan.
 
 ## Persyaratan
@@ -48,8 +46,6 @@ cp .env.example .env
 | `CLIENT_ID` | ya | Application (client) ID — dipakai untuk registrasi command. |
 | `GUILD_ID` | ya | ID server tempat command didaftarkan. |
 | `MONGODB_URI` | ya | Connection string MongoDB. |
-| `APPROVAL_CHANNEL_ID` | tidak | Channel permintaan approval role. Bisa juga diatur per-guild via `/config`. |
-| `APPROVER_ROLE_ID` | tidak | Legacy approver role ID (fallback). Sebaiknya atur per-guild via `/config`. |
 | `DNS_SERVERS` | tidak | DNS server untuk Node (mis. `8.8.8.8,1.1.1.1`) bila `mongodb+srv://` gagal resolve. |
 | `BOT_ACTIVITY` | tidak | Teks status; beberapa teks dipisah `\|` akan dirotasi. |
 | `BOT_ACTIVITY_TYPE` | tidak | `Playing` \| `Watching` \| `Listening` \| `Competing` (default `Playing`). |
@@ -73,11 +69,11 @@ npm test
 
 ## Daftar Perintah
 
-### Self-Role
+### Self-Role & PJ
 
 | Perintah | Akses | Keterangan |
 |---|---|---|
-| `/role me` | Semua | Buka menu untuk ambil/lepas role sendiri. Hanya dapat digunakan di channel yang telah diizinkan. |
+| `/role me pj:@User` | Semua | Buka menu untuk ambil/lepas role sendiri sekaligus men-tag penanggung jawabnya. Hanya dapat digunakan di channel yang diizinkan. |
 | `/role add <role>` | Admin | Tambah role ke daftar self-role. |
 | `/role remove <role>` | Admin | Hapus role dari daftar. |
 | `/role list` | Admin | Lihat daftar role yang tersedia. |
@@ -107,9 +103,10 @@ npm test
 
 | Perintah | Keterangan |
 |---|---|
-| `/config approver add <role>` | Tambah role approver baru (maks 3). |
+| `/config approver add <role>` | Tambah role approver baru untuk transaksi (maks 3). |
 | `/config approver remove <role>` | Hapus role approver dari daftar. |
-| `/config approval-channel <channel>` | Set channel approval role. |
+| `/config list-channel <channel>` | Set channel untuk menampilkan embed Penanggung Jawab (PJ) yang otomatis update. |
+| `/config tutorial-setup` | Memunculkan panduan cara memakai `/role me` di channel tersebut. |
 | `/config role-channel add <channel>` | Batasi perintah `/role me` hanya di channel ini. |
 | `/config role-channel remove <channel>` | Hapus batasan channel `/role me`. |
 | `/config role-channel list` | Tampilkan daftar channel yang diizinkan untuk `/role me`. |
