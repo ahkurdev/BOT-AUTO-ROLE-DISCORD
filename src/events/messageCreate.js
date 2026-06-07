@@ -76,7 +76,14 @@ module.exports = {
       // Message is not in any restricted channel -> ignore.
       if (!commandHint) return;
 
-      // --- Message is in a restricted channel: delete it. ---
+      // --- Message is in a restricted channel ---
+      // Check if this message is the designated tutorial message.
+      // If it is the tutorial message, leave it alone.
+      if (cfg.tutorialMessageId && message.id === cfg.tutorialMessageId) {
+        return;
+      }
+
+      // Delete the message
       try {
         await message.delete();
       } catch (_err) {

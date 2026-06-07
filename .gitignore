@@ -30,3 +30,7 @@ Thumbs.db
 
 # Archives
 *.zip
+
+# Opencode Agent
+agent.md
+.opencode/

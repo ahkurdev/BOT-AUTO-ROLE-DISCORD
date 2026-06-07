@@ -17,7 +17,8 @@ const {
   getConfig,
   addApproverRole,
   removeApproverRole,
-  setApprovalChannel,
+  setPjListChannel,
+  setTutorialMessageId,
   addRoleMeChannel,
   removeRoleMeChannel,
   addWdChannel,
@@ -31,34 +32,18 @@ const data = new SlashCommandBuilder()
   .setName('config')
   .setDescription('Konfigurasi bot untuk server ini')
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-  .addSubcommandGroup((group) =>
-    group
-      .setName('approver')
-      .setDescription('Kelola daftar role approver (maks 3 role)')
-      .addSubcommand((sub) =>
-        sub
-          .setName('add')
-          .setDescription('Tambah role ke daftar approver')
-          .addRoleOption((opt) =>
-            opt.setName('role').setDescription('Role yang ditambahkan').setRequired(true),
-          ),
-      )
-      .addSubcommand((sub) =>
-        sub
-          .setName('remove')
-          .setDescription('Hapus role dari daftar approver')
-          .addRoleOption((opt) =>
-            opt.setName('role').setDescription('Role yang dihapus').setRequired(true),
-          ),
+  .addSubcommand((sub) =>
+    sub
+      .setName('list-channel')
+      .setDescription('Set channel tempat daftar penanggung jawab (PJ) ditampilkan')
+      .addChannelOption((opt) =>
+        opt.setName('channel').setDescription('Channel list PJ').setRequired(true),
       ),
   )
   .addSubcommand((sub) =>
     sub
-      .setName('approval-channel')
-      .setDescription('Set channel approval role untuk server ini')
-      .addChannelOption((opt) =>
-        opt.setName('channel').setDescription('Channel approval').setRequired(true),
-      ),
+      .setName('tutorial-setup')
+      .setDescription('Tampilkan pesan tutorial /role me di channel saat ini'),
   )
   .addSubcommand((sub) =>
     sub.setName('show').setDescription('Tampilkan konfigurasi saat ini'),
@@ -157,59 +142,46 @@ async function handleConfig(interaction) {
   const sub = interaction.options.getSubcommand();
   const guildId = interaction.guild.id;
 
-  // /config approver add|remove
-  if (group === 'approver') {
-    const role = interaction.options.getRole('role');
-    if (sub === 'add') {
-      const result = await addApproverRole(guildId, role.id);
-      if (!result.added) {
-        const msg =
-          result.reason === 'duplicate'
-            ? `${role} sudah ada di daftar approver.`
-            : 'Maksimal 3 role approver. Hapus salah satu dulu sebelum menambah yang baru.';
-        return replyEphemeral(
-          interaction,
-          applyBranding(new EmbedBuilder().setColor(COLORS.warning).setTitle('Tidak dapat menambah').setDescription(msg)),
-        );
-      }
-      const list = result.approverRoleIds.map((id) => `<@&${id}>`).join(', ');
+  // /config list-channel
+  if (!group && sub === 'list-channel') {
+    const channel = interaction.options.getChannel('channel');
+    await setPjListChannel(guildId, channel.id);
+    return replyEphemeral(
+      interaction,
+      applyBranding(
+        new EmbedBuilder()
+          .setColor(COLORS.success)
+          .setTitle('Channel List PJ Diatur')
+          .setDescription(`Channel list PJ diset ke ${channel}.`),
+      ),
+    );
+  }
+
+  // /config tutorial-setup
+  if (!group && sub === 'tutorial-setup') {
+    const { tutorialEmbed } = require('../utils/embeds');
+    
+    try {
+      // Allow bot to send the message by bypassing its own auto-delete
+      const msg = await interaction.channel.send({ embeds: [tutorialEmbed()] });
+      await setTutorialMessageId(guildId, msg.id);
       return replyEphemeral(
         interaction,
         applyBranding(
           new EmbedBuilder()
             .setColor(COLORS.success)
-            .setTitle('Approver ditambah')
-            .setDescription(`${role} ditambahkan ke daftar approver.`)
-            .addFields({ name: 'Daftar approver saat ini', value: list }),
+            .setTitle('Tutorial Setup Sukses')
+            .setDescription('Pesan tutorial telah diposting di channel ini.'),
         ),
       );
-    }
-
-    if (sub === 'remove') {
-      const result = await removeApproverRole(guildId, role.id);
-      if (!result.removed) {
-        return replyEphemeral(
-          interaction,
-          applyBranding(
-            new EmbedBuilder()
-              .setColor(COLORS.warning)
-              .setTitle('Tidak ditemukan')
-              .setDescription(`${role} tidak ada di daftar approver.`),
-          ),
-        );
-      }
-      const list =
-        result.approverRoleIds.length > 0
-          ? result.approverRoleIds.map((id) => `<@&${id}>`).join(', ')
-          : '_Kosong_';
+    } catch (err) {
       return replyEphemeral(
         interaction,
         applyBranding(
           new EmbedBuilder()
-            .setColor(COLORS.success)
-            .setTitle('Approver dihapus')
-            .setDescription(`${role} dihapus dari daftar approver.`)
-            .addFields({ name: 'Daftar approver saat ini', value: list }),
+            .setColor(COLORS.error)
+            .setTitle('Error')
+            .setDescription('Gagal memposting pesan tutorial. Pastikan bot memiliki izin.'),
         ),
       );
     }
@@ -294,20 +266,8 @@ async function handleConfig(interaction) {
     }
   }
 
-  // /config approval-channel
-  if (!group && sub === 'approval-channel') {
-    const channel = interaction.options.getChannel('channel');
-    await setApprovalChannel(guildId, channel.id);
-    return replyEphemeral(
-      interaction,
-      applyBranding(
-        new EmbedBuilder()
-          .setColor(COLORS.success)
-          .setTitle('Channel approval diatur')
-          .setDescription(`Channel approval diset ke ${channel}.`),
-      ),
-    );
-  }
+  // Hapus blok approval-channel lama yang tersisa
+
 
   // /config wd-channel add|remove|list
   if (group === 'wd-channel') {
@@ -334,16 +294,11 @@ async function handleConfig(interaction) {
   // /config show
   if (!group && sub === 'show') {
     const cfg = await getConfig(guildId);
-    const approvers =
-      cfg.approverRoleIds.length > 0
-        ? cfg.approverRoleIds.map((id) => `<@&${id}>`).join(', ')
-        : '_Belum diatur_';
-    const approvalCh = cfg.approvalChannelId ? `<#${cfg.approvalChannelId}>` : '_Belum diatur_';
-    const status = cfg.approvalEnabled ? 'Aktif' : 'Nonaktif';
     const roleMeCh =
       cfg.roleMeChannelIds.length > 0
         ? cfg.roleMeChannelIds.map((id) => `<#${id}>`).join(', ')
         : '_Semua channel_';
+    const pjListCh = cfg.pjListChannelId ? `<#${cfg.pjListChannelId}>` : '_Belum diatur_';
     const wdCh =
       cfg.wdChannelIds.length > 0
         ? cfg.wdChannelIds.map((id) => `<#${id}>`).join(', ')
@@ -359,9 +314,7 @@ async function handleConfig(interaction) {
           .setColor(COLORS.info)
           .setTitle('Konfigurasi Server')
           .addFields(
-            { name: `Approver Role (${cfg.approverRoleIds.length}/3)`, value: approvers, inline: false },
-            { name: 'Approval Channel', value: approvalCh, inline: true },
-            { name: 'Mode Approval', value: status, inline: true },
+            { name: 'Channel List PJ', value: pjListCh, inline: false },
             { name: 'Channel /role me', value: roleMeCh, inline: true },
             { name: 'Channel /wd', value: wdCh, inline: true },
             { name: 'Channel /dp', value: dpCh, inline: true },

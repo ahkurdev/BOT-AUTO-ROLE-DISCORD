@@ -23,6 +23,12 @@ const guildConfigSchema = new mongoose.Schema(
      * When empty (default), the command is allowed in ALL channels.
      */
     roleMeChannelIds: { type: [String], default: [] },
+    /** Channel ID where the PJ List embed should be maintained. */
+    pjListChannelId: { type: String, default: null },
+    /** Message ID of the PJ List embed. */
+    pjListMessageId: { type: String, default: null },
+    /** Message ID of the Tutorial embed in the role channel. */
+    tutorialMessageId: { type: String, default: null },
     /** Channel IDs where `/wd` (withdraw) is allowed. */
     wdChannelIds: { type: [String], default: [] },
     /** Channel IDs where `/dp` (deposit) is allowed. */
@@ -61,19 +67,21 @@ async function getConfig(guildId, env = process.env) {
   const envRole = (env.APPROVER_ROLE_ID || '').trim();
   const approverRoleIds = dbRoles.length > 0 ? dbRoles : (envRole ? [envRole] : []);
 
-  const approvalChannelId =
-    (doc && doc.approvalChannelId) || (env.APPROVAL_CHANNEL_ID || '').trim() || null;
-
   const roleMeChannelIds = (doc && Array.isArray(doc.roleMeChannelIds) ? doc.roleMeChannelIds : []).filter(Boolean);
+  const pjListChannelId = (doc && doc.pjListChannelId) || null;
+  const pjListMessageId = (doc && doc.pjListMessageId) || null;
+  const tutorialMessageId = (doc && doc.tutorialMessageId) || null;
+  
   const wdChannelIds = (doc && Array.isArray(doc.wdChannelIds) ? doc.wdChannelIds : []).filter(Boolean);
   const dpChannelIds = (doc && Array.isArray(doc.dpChannelIds) ? doc.dpChannelIds : []).filter(Boolean);
 
   return {
     guildId,
     approverRoleIds,
-    approvalChannelId,
-    approvalEnabled: Boolean(approverRoleIds.length > 0 && approvalChannelId),
     roleMeChannelIds,
+    pjListChannelId,
+    pjListMessageId,
+    tutorialMessageId,
     wdChannelIds,
     dpChannelIds,
   };
@@ -149,14 +157,40 @@ async function setApproverRoles(guildId, roleIds) {
 }
 
 /**
- * Set the approval channel for a guild.
+ * Set the PJ List channel and reset the message ID.
  * @param {string} guildId
  * @param {string|null} channelId
  */
-async function setApprovalChannel(guildId, channelId) {
+async function setPjListChannel(guildId, channelId) {
   return GuildConfig.findOneAndUpdate(
     { guildId },
-    { $set: { approvalChannelId: channelId } },
+    { $set: { pjListChannelId: channelId, pjListMessageId: null } },
+    { upsert: true, new: true },
+  );
+}
+
+/**
+ * Save the PJ List message ID.
+ * @param {string} guildId
+ * @param {string|null} messageId
+ */
+async function setPjListMessageId(guildId, messageId) {
+  return GuildConfig.findOneAndUpdate(
+    { guildId },
+    { $set: { pjListMessageId: messageId } },
+    { upsert: true, new: true },
+  );
+}
+
+/**
+ * Save the Tutorial message ID.
+ * @param {string} guildId
+ * @param {string|null} messageId
+ */
+async function setTutorialMessageId(guildId, messageId) {
+  return GuildConfig.findOneAndUpdate(
+    { guildId },
+    { $set: { tutorialMessageId: messageId } },
     { upsert: true, new: true },
   );
 }
@@ -257,7 +291,9 @@ module.exports = {
   addApproverRole,
   removeApproverRole,
   setApproverRoles,
-  setApprovalChannel,
+  setPjListChannel,
+  setPjListMessageId,
+  setTutorialMessageId,
   addRoleMeChannel,
   removeRoleMeChannel,
   addWdChannel,

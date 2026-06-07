@@ -33,7 +33,7 @@ function helpEmbed() {
         {
           name: 'Self-Role',
           value: [
-            '`/role me` — buka menu untuk ambil/lepas role sendiri.',
+            '`/role me pj:@User` — buka menu untuk ambil/lepas role dan tentukan penanggung jawab.',
             '`/role add <role>` — **(Admin)** tambah role ke daftar self-role.',
             '`/role remove <role>` — **(Admin)** hapus role dari daftar.',
             '`/role list` — **(Admin)** lihat daftar role yang tersedia.',
@@ -67,9 +67,10 @@ function helpEmbed() {
         {
           name: 'Konfigurasi — Admin',
           value: [
-            '`/config approver add <role>` — tambah role approver (maks 3).',
+            '`/config approver add <role>` — tambah role approver untuk Live Stock (maks 3).',
             '`/config approver remove <role>` — hapus role approver.',
-            '`/config approval-channel <channel>` — set channel approval role.',
+            '`/config list-channel <channel>` — set channel list untuk embed Penanggung Jawab.',
+            '`/config tutorial-setup` — tampilkan pesan panduan otomatis di channel.',
             '`/config role-channel add <channel>` — batasi `/role me` ke channel tertentu.',
             '`/config role-channel remove <channel>` — hapus batasan channel `/role me`.',
             '`/config role-channel list` — lihat daftar channel yang diizinkan untuk `/role me`.',

@@ -349,6 +349,73 @@ function wrongChannelEmbed(allowedChannelIds) {
     );
 }
 
+/**
+ * PJ List Embed — Displays the list of PJ and the users they manage, grouped by PJ.
+ * Format:
+ * - <@NamaPJ>
+ * | <@User> [Role] | tanggal | hari
+ * 
+ * @param {Array<{pjId: string, users: Array<{userId: string, createdAt: Date, roleName: string}>}>} pjData
+ * @returns {EmbedBuilder}
+ */
+function pjListEmbed(pjData) {
+  const embed = new EmbedBuilder()
+    .setColor(COLORS.info)
+    .setTitle('Daftar Penanggung Jawab');
+
+  if (!pjData || pjData.length === 0) {
+    embed.setDescription('Belum ada penanggung jawab saat ini.');
+    return embed;
+  }
+
+  // Define indonesian days
+  const hariIndo = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+
+  let desc = '';
+
+  pjData.forEach(data => {
+    if (data.users.length === 0) return;
+
+    desc += `- <@${data.pjId}>\n`;
+
+    // Build the string for each user under this PJ
+    const lines = data.users.map(u => {
+      const dateObj = new Date(u.createdAt);
+      const day = hariIndo[dateObj.getDay()];
+      const dateString = dateObj.toLocaleDateString('id-ID', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+      return `| <@${u.userId}> [${u.roleName}] | ${dateString} | ${day}`;
+    });
+
+    desc += lines.join('\n') + '\n\n';
+  });
+
+  embed.setDescription(desc.trim());
+  return embed;
+}
+
+/**
+ * Tutorial Embed — Explains how to use the new `/role me pj` command.
+ * @returns {EmbedBuilder}
+ */
+function tutorialEmbed() {
+  return new EmbedBuilder()
+    .setColor(COLORS.info)
+    .setTitle('Panduan Pengambilan Role')
+    .setDescription(
+      'Untuk mengambil role dan menetapkan penanggung jawab (PJ), gunakan perintah berikut di chat:\n\n' +
+      '`/role me pj:@User`\n\n' +
+      '1. Ketik `/role me`\n' +
+      '2. Pilih opsi `pj` dan tag (mention) orang yang menjadi penanggung jawab\n' +
+      '3. Tekan Enter\n' +
+      '4. Menu pilihan role akan muncul, pilih role yang kamu inginkan\n\n' +
+      'Daftar role dan PJ akan diperbarui secara otomatis.'
+    );
+}
+
 module.exports = {
   BRAND_FOOTER,
   applyBranding,
@@ -373,5 +440,6 @@ module.exports = {
   notApproverEmbed: branded(notApproverEmbed),
   requestApprovedEmbed: branded(requestApprovedEmbed),
   requestRejectedEmbed: branded(requestRejectedEmbed),
-  wrongChannelEmbed: branded(wrongChannelEmbed),
+  pjListEmbed: branded(pjListEmbed),
+  tutorialEmbed: branded(tutorialEmbed),
 };

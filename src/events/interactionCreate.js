@@ -22,11 +22,8 @@ const { Events, EmbedBuilder, MessageFlags } = require('discord.js');
 
 const {
   ROLE_SELECT_CUSTOM_ID,
-  APPROVE_BUTTON_PREFIX,
-  REJECT_BUTTON_PREFIX,
   handleRoleMe,
   handleRoleSelect,
-  handleApprovalButton,
   handleRoleAdd,
   handleRoleRemove,
   handleRoleList,
@@ -134,21 +131,13 @@ module.exports = {
 
     // Route the self-role String Select Menu selection (Req 2.1).
     // Supports pagination: customId can be 'role-select' or 'role-select:0', etc.
+    // Also contains the PJ encoded: 'role-select:index:pjId'
     if (
       interaction.isStringSelectMenu() &&
       (interaction.customId === ROLE_SELECT_CUSTOM_ID ||
         interaction.customId.startsWith(`${ROLE_SELECT_CUSTOM_ID}:`))
     ) {
       return handleRoleSelect(interaction);
-    }
-
-    // Route approval Accept/Reject button clicks (approval mode).
-    if (
-      interaction.isButton() &&
-      (interaction.customId.startsWith(`${APPROVE_BUTTON_PREFIX}:`) ||
-        interaction.customId.startsWith(`${REJECT_BUTTON_PREFIX}:`))
-    ) {
-      return handleApprovalButton(interaction);
     }
 
     // Route livestock reset confirmation/cancel buttons.
