@@ -11,7 +11,7 @@
  * membantu coding sebagai lapis kedua.
  */
 
-const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 
 const {
   ZEN_FREE_MODELS,
@@ -70,16 +70,14 @@ async function handleAiChat(interaction) {
   const pesan = interaction.options.getString('pesan', true);
   const model = interaction.options.getString('model') || 'auto';
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await interaction.deferReply();
 
   const result = await chatWithAI(pesan, { preferredModel: model });
 
   const embed = applyBranding(new EmbedBuilder().setColor(result.ok ? COLORS.info : COLORS.error));
   if (result.ok) {
     embed.setTitle('AI Chat').setDescription(result.text);
-    if (result.model) {
-      embed.setFooter({ text: `${result.provider}/${result.model} • Created by Allan` });
-    }
+    embed.setFooter({ text: 'Model: Dark el • Created by Allan' });
   } else {
     embed.setTitle('AI sibuk').setDescription(result.text);
   }

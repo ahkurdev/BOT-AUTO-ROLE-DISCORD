@@ -64,10 +64,49 @@ module.exports = {
   /**
    * Route an incoming interaction to the appropriate handler.
    *
+   * Wrapped so an async handler failure (e.g. "Unknown interaction" when
+   * the user deletes the command or the token expires) is logged instead
+   * of becoming an uncaught exception that kills the bot.
+   *
    * @param {import('discord.js').Interaction} interaction - the incoming interaction
-   * @returns {Promise<unknown> | undefined}
+   * @returns {undefined}
    */
   execute(interaction) {
+    route(interaction).catch((err) => {
+      log.error('Interaction handler error', {
+        error: err && err.message ? err.message : String(err),
+      });
+      // Best-effort: tell the user something went wrong, ignore if the
+      // interaction is already dead (replied/expired/deleted).
+      try {
+        if (interaction.isRepliable && interaction.isRepliable()) {
+          interaction
+            .reply({
+              embeds: [
+                applyBranding(
+                  new EmbedBuilder()
+                    .setColor(COLORS.error)
+                    .setTitle('Terjadi kesalahan')
+                    .setDescription('Aksi tidak dapat diselesaikan. Coba lagi sebentar lagi.'),
+                ),
+              ],
+              flags: MessageFlags.Ephemeral,
+            })
+            .catch(() => {});
+        }
+      } catch (_e) {
+        // ignore
+      }
+    });
+    return undefined;
+  },
+};
+
+/**
+ * Actual routing logic (async, errors bubble to `execute`'s catch).
+ * @param {import('discord.js').Interaction} interaction
+ */
+async function route(interaction) {
     // Autocomplete for stock commands (/wd, /dp, /livestock).
     if (interaction.isAutocomplete()) {
       if (
@@ -169,5 +208,4 @@ module.exports = {
 
     // Any other interaction type is ignored.
     return undefined;
-  },
-};
+}

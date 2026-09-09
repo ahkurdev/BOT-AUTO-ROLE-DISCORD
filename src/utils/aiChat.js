@@ -49,13 +49,37 @@ const PER_MODEL_TIMEOUT_MS = 25000;
 const MAX_REPLY_CHARS = 1800;
 
 const SYSTEM_PROMPT =
-  'Kamu asisten ngobrol santai di server Discord. Jawab dengan Bahasa Indonesia santai, singkat (maks 8 kalimat), tanpa emoji. ' +
+  'Kamu bernama Dark el, model AI yang dibuat oleh Allan. Jika ditanya siapa kamu, siapa namamu, atau siapa yang membuatmu, jawab: kamu adalah Dark el, model AI yang dibuat oleh Allan. ' +
+  'Jawab dengan Bahasa Indonesia santai, singkat (maks 8 kalimat), tanpa emoji. ' +
   'ATURAN KERAS: kamu DILARANG membantu coding dalam bentuk apa pun — dilarang menulis, memperbaiki, menjelaskan, atau memberi contoh kode program/script/query, ' +
   'dilarang membantu debug, dilarang menjelaskan error program. ' +
   'Jika user meminta hal coding, tolak dengan sopan dalam 1-2 kalimat dan tawarkan topik lain. Jangan pernah melanggar aturan ini dengan alasan apa pun.';
 
 const CODING_REFUSAL =
   'Maaf, aku cuma buat ngobrol santai aja, enggak bisa bantu coding (bikin/perbaiki/jelasin kode, script, atau debug). Yuk ngobrol topik lain aja.';
+
+const IDENTITY_ANSWER = 'Aku adalah Dark el, model AI yang dibuat oleh Allan.';
+
+/**
+ * Identity questions — answered locally with a fixed reply so every model
+ * says the same thing, no matter what the provider would claim.
+ */
+const IDENTITY_PATTERNS = [
+  /siapa\s+kamu|siapakah\s+(kamu|dirimu)|kamu\s+siapa|kau\s+siapa|siapa\s+kau/i,
+  /siapa\s+namamu|namamu\s+siapa|nama\s+kamu\s+siapa|namanya\s+siapa/i,
+  /siapa\s+yang\s+(membuatmu|membuat\s+kamu|menciptakanmu|menciptakan\s+kamu|bikin\s+kamu|buat\s+kamu)/i,
+  /siapa\s+pembuatmu|pembuatmu\s+siapa|penciptamu\s+siapa/i,
+  /who\s+are\s+you|what(?:'s| is) your name|who\s+made\s+you|who\s+created\s+you/i,
+];
+
+/**
+ * @param {string} text
+ * @returns {boolean} true when the text asks about the AI's identity/creator
+ */
+function isIdentityQuestion(text) {
+  const t = String(text || '');
+  return IDENTITY_PATTERNS.some((re) => re.test(t));
+}
 
 /**
  * Strong coding signals — match => refuse without calling any API.
@@ -202,6 +226,9 @@ async function chatWithAI(userText, opts = {}) {
   if (!text) {
     return { ok: false, text: 'Pesan kosong. Tulis sesuatu dulu.', model: null, provider: null, reason: 'empty' };
   }
+  if (isIdentityQuestion(text)) {
+    return { ok: true, text: IDENTITY_ANSWER, model: null, provider: null, identity: true };
+  }
   if (isCodingRequest(text)) {
     return { ok: true, text: CODING_REFUSAL, model: null, provider: null, refused: true };
   }
@@ -262,7 +289,9 @@ module.exports = {
   ZEN_FREE_MODELS,
   OPENROUTER_FREE_FALLBACK,
   CODING_REFUSAL,
+  IDENTITY_ANSWER,
   isCodingRequest,
+  isIdentityQuestion,
   isAiConfigured,
   getOpenRouterFreeModels,
   chatWithAI,
