@@ -18,6 +18,8 @@ const DEFAULT_COOLDOWNS = {
   livestock: 5000,
   role: 2000,
   config: 5000,
+  ai: 10000,
+  'role-select': 2000,
 };
 
 // Periodic cleanup to prevent memory leaks from departed users.

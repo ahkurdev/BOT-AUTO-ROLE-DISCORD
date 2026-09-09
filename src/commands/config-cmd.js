@@ -50,6 +50,28 @@ const data = new SlashCommandBuilder()
   )
   .addSubcommandGroup((group) =>
     group
+      .setName('approver')
+      .setDescription('Kelola role approver Live Stock (maks 3)')
+      .addSubcommand((sub) =>
+        sub
+          .setName('add')
+          .setDescription('Tambah role approver')
+          .addRoleOption((opt) =>
+            opt.setName('role').setDescription('Role approver').setRequired(true),
+          ),
+      )
+      .addSubcommand((sub) =>
+        sub
+          .setName('remove')
+          .setDescription('Hapus role approver')
+          .addRoleOption((opt) =>
+            opt.setName('role').setDescription('Role approver').setRequired(true),
+          ),
+      )
+      .addSubcommand((sub) => sub.setName('list').setDescription('Lihat daftar approver')),
+  )
+  .addSubcommandGroup((group) =>
+    group
       .setName('role-channel')
       .setDescription('Kelola channel yang diizinkan untuk /role me')
       .addSubcommand((sub) =>
@@ -268,6 +290,72 @@ async function handleConfig(interaction) {
 
   // Hapus blok approval-channel lama yang tersisa
 
+
+  // /config approver add|remove|list (maks 3 role, dipakai gate /livestock)
+  if (group === 'approver') {
+    const sub2 = interaction.options.getSubcommand();
+    if (sub2 === 'add') {
+      const role = interaction.options.getRole('role');
+      const result = await addApproverRole(guildId, role.id);
+      if (!result.added) {
+        const msg =
+          result.reason === 'limit_reached'
+            ? 'Sudah 3 approver (maksimal). Hapus satu dulu.'
+            : `${role} sudah jadi approver.`;
+        return replyEphemeral(
+          interaction,
+          applyBranding(new EmbedBuilder().setColor(COLORS.warning).setTitle('Gagal').setDescription(msg)),
+        );
+      }
+      return replyEphemeral(
+        interaction,
+        applyBranding(
+          new EmbedBuilder()
+            .setColor(COLORS.success)
+            .setTitle('Approver ditambahkan')
+            .setDescription(`${role} ditambahkan sebagai approver.`)
+            .addFields({ name: 'Approver', value: result.approverRoleIds.map((id) => `<@&${id}>`).join(', ') }),
+        ),
+      );
+    }
+    if (sub2 === 'remove') {
+      const role = interaction.options.getRole('role');
+      const result = await removeApproverRole(guildId, role.id);
+      if (!result.removed) {
+        return replyEphemeral(
+          interaction,
+          applyBranding(
+            new EmbedBuilder().setColor(COLORS.warning).setTitle('Tidak ditemukan').setDescription(`${role} bukan approver.`),
+          ),
+        );
+      }
+      const list =
+        result.approverRoleIds.length > 0
+          ? result.approverRoleIds.map((id) => `<@&${id}>`).join(', ')
+          : '_Belum ada approver_';
+      return replyEphemeral(
+        interaction,
+        applyBranding(
+          new EmbedBuilder()
+            .setColor(COLORS.success)
+            .setTitle('Approver dihapus')
+            .setDescription(`${role} dihapus dari approver.`)
+            .addFields({ name: 'Approver', value: list }),
+        ),
+      );
+    }
+    if (sub2 === 'list') {
+      const cfg2 = await getConfig(guildId);
+      const list =
+        cfg2.approverRoleIds.length > 0
+          ? cfg2.approverRoleIds.map((id) => `<@&${id}>`).join('\n')
+          : '_Belum ada approver_';
+      return replyEphemeral(
+        interaction,
+        applyBranding(new EmbedBuilder().setColor(COLORS.info).setTitle('Daftar approver').setDescription(list)),
+      );
+    }
+  }
 
   // /config wd-channel add|remove|list
   if (group === 'wd-channel') {

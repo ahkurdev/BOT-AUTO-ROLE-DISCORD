@@ -75,9 +75,15 @@ async function getConfig(guildId, env = process.env) {
   const wdChannelIds = (doc && Array.isArray(doc.wdChannelIds) ? doc.wdChannelIds : []).filter(Boolean);
   const dpChannelIds = (doc && Array.isArray(doc.dpChannelIds) ? doc.dpChannelIds : []).filter(Boolean);
 
+  // Approval channel (schema field). approvalEnabled true only when a channel
+  // is set AND at least one approver role exists (env fallback included).
+  const approvalChannelId = (doc && doc.approvalChannelId) || env.APPROVAL_CHANNEL_ID?.trim() || null;
+
   return {
     guildId,
     approverRoleIds,
+    approvalChannelId,
+    approvalEnabled: Boolean(approvalChannelId && approverRoleIds.length > 0),
     roleMeChannelIds,
     pjListChannelId,
     pjListMessageId,

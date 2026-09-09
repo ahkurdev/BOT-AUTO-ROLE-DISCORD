@@ -62,14 +62,27 @@ module.exports = {
 
       // Build a lookup: channelId -> command hint string.
       // A channel can only belong to one restriction type (first match wins).
+      // Sources honored additively (existing behavior kept):
+      //   GuildConfig lists (/config ...) + GuildStock single channel (/livestock setwd/setdp).
       const channelId = message.channelId;
       let commandHint = null;
 
+      let stockWd = null;
+      let stockDp = null;
+      try {
+        const { getStock } = require('../models/GuildStock');
+        const stock = await getStock(message.guild.id);
+        stockWd = stock ? stock.wdChannelId : null;
+        stockDp = stock ? stock.dpChannelId : null;
+      } catch (_e) {
+        // best-effort
+      }
+
       if ((cfg.roleMeChannelIds || []).includes(channelId)) {
         commandHint = '/role me';
-      } else if ((cfg.wdChannelIds || []).includes(channelId)) {
+      } else if ((cfg.wdChannelIds || []).includes(channelId) || (stockWd && channelId === stockWd)) {
         commandHint = '/wd';
-      } else if ((cfg.dpChannelIds || []).includes(channelId)) {
+      } else if ((cfg.dpChannelIds || []).includes(channelId) || (stockDp && channelId === stockDp)) {
         commandHint = '/dp';
       }
 

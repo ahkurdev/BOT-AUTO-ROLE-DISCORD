@@ -93,7 +93,11 @@ function helpEmbed() {
         },
         {
           name: 'Lain-lain',
-          value: '`/help` — tampilkan panduan ini.',
+          value: [
+            '`/help` — tampilkan panduan ini.',
+            '`/ai chat <pesan> [model]` — ngobrol santai dengan AI (tidak melayani coding).',
+            '`/ai models` — lihat daftar model AI gratis.',
+          ].join('\n'),
         },
       ),
   );

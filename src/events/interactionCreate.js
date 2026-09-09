@@ -39,6 +39,7 @@ const {
 } = require('../commands/stock');
 const { handleHelp } = require('../commands/help');
 const { handleConfig } = require('../commands/config-cmd');
+const { handleAiChat, handleAiModels } = require('../commands/ai');
 const { checkRateLimit } = require('../utils/rateLimit');
 const { COLORS, applyBranding } = require('../utils/shared');
 const log = require('../utils/logger');
@@ -124,6 +125,12 @@ module.exports = {
           return handleHelp(interaction);
         case 'config':
           return handleConfig(interaction);
+        case 'ai': {
+          const sub = interaction.options.getSubcommand();
+          if (sub === 'chat') return handleAiChat(interaction);
+          if (sub === 'models') return handleAiModels(interaction);
+          break;
+        }
         default:
           break;
       }
@@ -132,11 +139,22 @@ module.exports = {
     // Route the self-role String Select Menu selection (Req 2.1).
     // Supports pagination: customId can be 'role-select' or 'role-select:0', etc.
     // Also contains the PJ encoded: 'role-select:index:pjId'
+    // Rate-limited so spam-click cannot hammer roles.add/remove + DB writes.
     if (
       interaction.isStringSelectMenu() &&
       (interaction.customId === ROLE_SELECT_CUSTOM_ID ||
         interaction.customId.startsWith(`${ROLE_SELECT_CUSTOM_ID}:`))
     ) {
+      const uid = interaction.user?.id || interaction.member?.id;
+      if (uid) {
+        const rl = checkRateLimit(uid, 'role-select');
+        if (rl.limited) {
+          return interaction.reply({
+            embeds: [rateLimitedEmbed(rl.remainingMs)],
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+      }
       return handleRoleSelect(interaction);
     }
 

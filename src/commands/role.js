@@ -202,6 +202,18 @@ async function handleRoleMe(interaction) {
   const guildId = interaction.guild.id;
   const pjUser = interaction.options.getUser('pj');
 
+  // PJ validation (additive guard): PJ wajib user valid, bukan bot,
+  // dan bukan diri sendiri (penanggung jawab = orang lain).
+  if (!pjUser) {
+    return replyEphemeral(interaction, genericErrorEmbed('Pilih penanggung jawab (PJ) dulu.'));
+  }
+  if (pjUser.bot) {
+    return replyEphemeral(interaction, genericErrorEmbed('PJ tidak boleh bot. Tag user lain sebagai penanggung jawab.'));
+  }
+  if (interaction.user && pjUser.id === interaction.user.id) {
+    return replyEphemeral(interaction, genericErrorEmbed('PJ tidak boleh diri sendiri. Tag user lain sebagai penanggung jawab.'));
+  }
+
   // Channel restriction check: if roleMeChannelIds is configured, only allow
   // the command in those channels. Warn the user and auto-delete after 5 s.
   const cfg = await getGuildConfig(guildId);
@@ -293,6 +305,18 @@ async function handleRoleSelect(interaction) {
 
   if (!pjId) {
     return replyEphemeral(interaction, genericErrorEmbed());
+  }
+
+  // PJ must not be the requester themselves.
+  const requesterId = interaction.member ? interaction.member.id : (interaction.user ? interaction.user.id : null);
+  if (requesterId && pjId === requesterId) {
+    return replyEphemeral(interaction, genericErrorEmbed('PJ tidak boleh diri sendiri. Ulangi /role me dengan tag user lain.'));
+  }
+  // PJ must still be a guild member (best-effort verify).
+  try {
+    await interaction.guild.members.fetch(pjId);
+  } catch (_e) {
+    return replyEphemeral(interaction, genericErrorEmbed('PJ tidak ditemukan di server ini. Ulangi /role me dengan PJ yang valid.'));
   }
 
   // Re-resolve the role; it may have been deleted since the menu was built.

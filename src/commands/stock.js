@@ -345,6 +345,10 @@ async function handleTransaction(interaction, type) {
   }
 
   // Enforce the per-command channel restriction when one is configured.
+  // Two sources are honored additively (existing behavior kept):
+  //   1. GuildStock single channel (/livestock setwd/setdp)
+  //   2. GuildConfig channel list (/config wd-channel / dp-channel)
+  // If either restricts and the current channel is not allowed -> refuse.
   const restrictedChannelId = type === 'withdraw' ? stock.wdChannelId : stock.dpChannelId;
   if (restrictedChannelId && interaction.channelId !== restrictedChannelId) {
     return replyEphemeral(
@@ -354,6 +358,22 @@ async function handleTransaction(interaction, type) {
         channelId: restrictedChannelId,
       }),
     );
+  }
+  try {
+    const { getConfig: getGuildCfg } = require('../models/GuildConfig');
+    const guildCfg = await getGuildCfg(guildId);
+    const listIds = type === 'withdraw' ? guildCfg.wdChannelIds || [] : guildCfg.dpChannelIds || [];
+    if (listIds.length > 0 && !listIds.includes(interaction.channelId)) {
+      return replyEphemeral(
+        interaction,
+        wrongChannelEmbed({
+          commandLabel: type === 'withdraw' ? '/wd' : '/dp',
+          channelId: listIds[0],
+        }),
+      );
+    }
+  } catch (_e) {
+    // best-effort: config lookup failure must not block the transaction
   }
 
   const result =

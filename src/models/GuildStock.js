@@ -237,18 +237,33 @@ async function removeItem(guildId, categoryName, itemName) {
 
 /**
  * Reset all item quantities to 0 across every category.
+ *
+ * Uses the same optimistic concurrency control as applyMutation: the write
+ * only lands when `__v` is unchanged since the read, with retries on
+ * conflict, so a concurrent /wd or /dp cannot be silently lost.
  * @param {string} guildId
+ * @param {number} [maxRetries=3]
  * @returns {Promise<object|null>}
  */
-async function resetAllStock(guildId) {
-  const doc = await getStock(guildId);
-  if (!doc) return null;
-  const cats = doc.categories ? (doc.categories.toObject?.() ?? doc.categories) : [];
-  const reset = JSON.parse(JSON.stringify(cats)).map((c) => ({
-    ...c,
-    items: (c.items || []).map((i) => ({ ...i, quantity: 0 })),
-  }));
-  return setCategories(guildId, reset);
+async function resetAllStock(guildId, maxRetries = 3) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const doc = await ensureStock(guildId);
+    if (!doc) return null;
+    const version = doc.__v;
+    const cats = doc.categories ? (doc.categories.toObject?.() ?? doc.categories) : [];
+    const reset = JSON.parse(JSON.stringify(cats)).map((c) => ({
+      ...c,
+      items: (c.items || []).map((i) => ({ ...i, quantity: 0 })),
+    }));
+    const updated = await GuildStock.findOneAndUpdate(
+      { guildId, __v: version },
+      { $set: { categories: reset }, $inc: { __v: 1 } },
+      { new: true },
+    );
+    if (updated) return updated;
+    // Version mismatch — retry with fresh document.
+  }
+  return null;
 }
 
 module.exports = {
