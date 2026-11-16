@@ -1,30 +1,32 @@
+Bahasa Indonesia version: [readme.id.md](readme.id.md)
+
 # Bot Shellby
 
-Bot Discord serbaguna untuk **self-role & Penanggung Jawab (PJ)**, **manajemen stok (withdraw/deposit)** dengan papan **Live Stock** real-time. Dibangun dengan Node.js + discord.js v14, data tersimpan per-guild di MongoDB.
+A versatile Discord bot for **self-role & Person in Charge (PJ)**, **stock management (withdraw/deposit)** with a real-time **Live Stock** board. Built with Node.js + discord.js v14, with data stored per-guild in MongoDB.
 
-## Fitur
+## Features
 
-- **Self-role & Penanggung Jawab** — Anggota mengambil/melepas role sendiri lewat menu sekaligus menunjuk penanggung jawabnya via `/role me pj:@User`. Daftar kepemilikan role dan PJ akan otomatis terkelola dalam bentuk embed publik.
-- **Pembatasan channel** — `/role me`, `/wd`, dan `/dp` dapat dibatasi ke channel-channel tertentu melalui konfigurasi.
-- **Auto-delete pesan biasa** — Pesan teks biasa di channel khusus command (role me, wd, dp) akan **otomatis dihapus** dan pengirim diberikan peringatan sementara (8 detik) sebelum dihapus kembali secara bersih tanpa emoji (pesan tutorial dikecualikan).
-- **Withdraw / Deposit** — `/wd` dan `/dp` untuk semua anggota, dengan pencocokan kategori otomatis.
-- **Live Stock board** — Papan stok yang otomatis diperbarui setiap transaksi, angka diformat dengan pemisah ribuan (mis. `14.894.829`).
-- **Log transaksi** — Setiap withdraw/deposit dapat dicatat ke channel log dan tersimpan di database (auto-hapus 90 hari).
-- **Presence** — Status bot ("Playing/Watching ...") yang dapat dirotasi.
-- **Auto-deploy** — Slash command otomatis terdaftar saat bot start.
-- **Rate limiting** — Anti-spam per user per command (cooldown 3-5 detik).
-- **Konfigurasi per-guild** — Approver role, channel list PJ, channel tutorial, dan pembatasan channel diatur per server lewat `/config`.
-- **Graceful shutdown** — Koneksi MongoDB and Discord ditutup bersih saat bot dimatikan.
+- **Self-role & Person in Charge** — Members take/remove roles themselves via a menu while also assigning their person in charge via `/role me pj:@User`. The role ownership and PJ lists are automatically managed in a public embed.
+- **Channel restrictions** — `/role me`, `/wd`, and `/dp` can be restricted to specific channels via configuration.
+- **Auto-delete plain messages** — Plain text messages in command-specific channels (role me, wd, dp) are **automatically deleted** and the sender is given a temporary warning (8 seconds) before it is cleanly deleted again without emoji (tutorial messages are excluded).
+- **Withdraw / Deposit** — `/wd` and `/dp` for all members, with automatic category matching.
+- **Live Stock board** — A stock board that updates automatically with every transaction, numbers formatted with thousand separators (e.g. `14.894.829`).
+- **Transaction log** — Every withdraw/deposit can be recorded to a log channel and stored in the database (auto-deleted after 90 days).
+- **Presence** — Rotatable bot status ("Playing/Watching ...").
+- **Auto-deploy** — Slash commands are automatically registered when the bot starts.
+- **Rate limiting** — Anti-spam per user per command (3-5 second cooldown).
+- **Per-guild configuration** — Approver role, PJ channel list, tutorial channel, and channel restrictions are set per server via `/config`.
+- **Graceful shutdown** — MongoDB and Discord connections are closed cleanly when the bot is stopped.
 
-## Persyaratan
+## Requirements
 
 - Node.js 18+
-- MongoDB (lokal atau Atlas)
-- Aplikasi bot di [Discord Developer Portal](https://discord.com/developers/applications)
-  - **Server Members Intent** dan **Message Content Intent** harus diaktifkan (Bot > Privileged Gateway Intents).
-  - Bot diundang dengan scope `bot` dan `applications.commands`, serta permission **Manage Roles** dan **Manage Messages**.
+- MongoDB (local or Atlas)
+- A bot application in the [Discord Developer Portal](https://discord.com/developers/applications)
+  - **Server Members Intent** and **Message Content Intent** must be enabled (Bot > Privileged Gateway Intents).
+  - The bot is invited with the `bot` and `applications.commands` scopes, and the **Manage Roles** and **Manage Messages** permissions.
 
-## Instalasi
+## Installation
 
 ```bash
 git clone https://github.com/Allan4u/bot-shellby.git
@@ -32,91 +34,91 @@ cd bot-shellby
 npm install
 ```
 
-## Konfigurasi
+## Configuration
 
-Salin `.env.example` menjadi `.env` lalu isi nilainya:
+Copy `.env.example` to `.env` and fill in the values:
 
 ```bash
 cp .env.example .env
 ```
 
-| Variabel | Wajib | Keterangan |
+| Variable | Required | Description |
 |---|---|---|
-| `DISCORD_TOKEN` | ya | Token bot dari Developer Portal. |
-| `CLIENT_ID` | ya | Application (client) ID — dipakai untuk registrasi command. |
-| `GUILD_ID` | ya | ID server tempat command didaftarkan. |
-| `MONGODB_URI` | ya | Connection string MongoDB. |
-| `DNS_SERVERS` | tidak | DNS server untuk Node (mis. `8.8.8.8,1.1.1.1`) bila `mongodb+srv://` gagal resolve. |
-| `BOT_ACTIVITY` | tidak | Teks status; beberapa teks dipisah `\|` akan dirotasi. |
-| `BOT_ACTIVITY_TYPE` | tidak | `Playing` \| `Watching` \| `Listening` \| `Competing` (default `Playing`). |
-| `BOT_STATUS` | tidak | `online` \| `idle` \| `dnd` \| `invisible` (default `online`). |
-| `BOT_ACTIVITY_ROTATE_MS` | tidak | Interval rotasi status (min 15000, default 30000). |
-| `AUTO_DEPLOY_COMMANDS` | tidak | Daftarkan command otomatis saat start (default `true`; set `false` untuk manual). |
-| `LOG_LEVEL` | tidak | Level log: `debug` \| `info` \| `warn` \| `error` (default `info`). |
+| `DISCORD_TOKEN` | yes | Bot token from the Developer Portal. |
+| `CLIENT_ID` | yes | Application (client) ID — used for command registration. |
+| `GUILD_ID` | yes | ID of the server where commands are registered. |
+| `MONGODB_URI` | yes | MongoDB connection string. |
+| `DNS_SERVERS` | no | DNS servers for Node (e.g. `8.8.8.8,1.1.1.1`) if `mongodb+srv://` fails to resolve. |
+| `BOT_ACTIVITY` | no | Status text; multiple texts separated by `\|` will be rotated. |
+| `BOT_ACTIVITY_TYPE` | no | `Playing` \| `Watching` \| `Listening` \| `Competing` (default `Playing`). |
+| `BOT_STATUS` | no | `online` \| `idle` \| `dnd` \| `invisible` (default `online`). |
+| `BOT_ACTIVITY_ROTATE_MS` | no | Status rotation interval (min 15000, default 30000). |
+| `AUTO_DEPLOY_COMMANDS` | no | Register commands automatically on start (default `true`; set `false` for manual). |
+| `LOG_LEVEL` | no | Log level: `debug` \| `info` \| `warn` \| `error` (default `info`). |
 
-## Menjalankan
+## Running
 
 ```bash
-# Daftarkan slash command secara manual
+# Register slash commands manually
 npm run deploy
 
-# Jalankan bot
+# Run the bot
 npm start
 
-# Jalankan test
+# Run tests
 npm test
 ```
 
-## Daftar Perintah
+## Command List
 
 ### Self-Role & PJ
 
-| Perintah | Akses | Keterangan |
+| Command | Access | Description |
 |---|---|---|
-| `/role me pj:@User` | Semua | Buka menu untuk ambil/lepas role sendiri sekaligus men-tag penanggung jawabnya. Hanya dapat digunakan di channel yang diizinkan. |
-| `/role add <role>` | Admin | Tambah role ke daftar self-role. |
-| `/role remove <role>` | Admin | Hapus role dari daftar. |
-| `/role list` | Admin | Lihat daftar role yang tersedia. |
+| `/role me pj:@User` | Everyone | Open the menu to take/remove your own roles while tagging your person in charge. Only usable in allowed channels. |
+| `/role add <role>` | Admin | Add a role to the self-role list. |
+| `/role remove <role>` | Admin | Remove a role from the list. |
+| `/role list` | Admin | View the list of available roles. |
 
-### Stock (Semua Anggota)
+### Stock (All Members)
 
-| Perintah | Keterangan |
+| Command | Description |
 |---|---|
-| `/wd <jumlah> <item> [kategori]` | Tarik item dari stok. Hanya dapat digunakan di channel yang diizinkan (jika diatur). |
-| `/dp <jumlah> <item> [kategori]` | Setor item. Hanya dapat digunakan di channel yang diizinkan (jika diatur). |
+| `/wd <amount> <item> [category]` | Withdraw an item from stock. Only usable in allowed channels (if set). |
+| `/dp <amount> <item> [category]` | Deposit an item. Only usable in allowed channels (if set). |
 
 ### Live Stock (Approver)
 
-| Perintah | Keterangan |
+| Command | Description |
 |---|---|
-| `/livestock channel <channel>` | Pasang papan Live Stock di channel. |
-| `/livestock log <channel>` | Set channel log transaksi. |
-| `/livestock create category <nama> [emoji]` | Buat kategori baru. |
-| `/livestock delete category <nama>` | Hapus kategori. |
-| `/livestock item add <kategori> <nama> [jumlah]` | Tambah item ke kategori. |
-| `/livestock item remove <kategori> <nama>` | Hapus item dari kategori. |
-| `/livestock refresh` | Perbarui tampilan papan. |
-| `/livestock reset` | Reset semua jumlah stok ke 0 (dengan konfirmasi). |
-| `/livestock history [user] [jumlah]` | Lihat riwayat transaksi terakhir. |
+| `/livestock channel <channel>` | Place the Live Stock board in a channel. |
+| `/livestock log <channel>` | Set the transaction log channel. |
+| `/livestock create category <name> [emoji]` | Create a new category. |
+| `/livestock delete category <name>` | Delete a category. |
+| `/livestock item add <category> <name> [amount]` | Add an item to a category. |
+| `/livestock item remove <category> <name>` | Remove an item from a category. |
+| `/livestock refresh` | Refresh the board display. |
+| `/livestock reset` | Reset all stock amounts to 0 (with confirmation). |
+| `/livestock history [user] [amount]` | View the latest transaction history. |
 
-### Konfigurasi (Admin)
+### Configuration (Admin)
 
-| Perintah | Keterangan |
+| Command | Description |
 |---|---|
-| `/config approver add <role>` | Tambah role approver baru untuk transaksi (maks 3). |
-| `/config approver remove <role>` | Hapus role approver dari daftar. |
-| `/config list-channel <channel>` | Set channel untuk menampilkan embed Penanggung Jawab (PJ) yang otomatis update. |
-| `/config tutorial-setup` | Memunculkan panduan cara memakai `/role me` di channel tersebut. |
-| `/config role-channel add <channel>` | Batasi perintah `/role me` hanya di channel ini. |
-| `/config role-channel remove <channel>` | Hapus batasan channel `/role me`. |
-| `/config role-channel list` | Tampilkan daftar channel yang diizinkan untuk `/role me`. |
-| `/config wd-channel add <channel>` | Batasi perintah `/wd` hanya di channel ini. |
-| `/config wd-channel remove <channel>` | Hapus batasan channel `/wd`. |
-| `/config wd-channel list` | Tampilkan daftar channel yang diizinkan untuk `/wd`. |
-| `/config dp-channel add <channel>` | Batasi perintah `/dp` hanya di channel ini. |
-| `/config dp-channel remove <channel>` | Hapus batasan channel `/dp`. |
-| `/config dp-channel list` | Tampilkan daftar channel yang diizinkan untuk `/dp`. |
-| `/config show` | Tampilkan semua konfigurasi server saat ini. |
+| `/config approver add <role>` | Add a new approver role for transactions (max 3). |
+| `/config approver remove <role>` | Remove an approver role from the list. |
+| `/config list-channel <channel>` | Set the channel for displaying the Person in Charge (PJ) embed, which updates automatically. |
+| `/config tutorial-setup` | Show a guide on how to use `/role me` in that channel. |
+| `/config role-channel add <channel>` | Restrict the `/role me` command to this channel only. |
+| `/config role-channel remove <channel>` | Remove the `/role me` channel restriction. |
+| `/config role-channel list` | Show the list of allowed channels for `/role me`. |
+| `/config wd-channel add <channel>` | Restrict the `/wd` command to this channel only. |
+| `/config wd-channel remove <channel>` | Remove the `/wd` channel restriction. |
+| `/config wd-channel list` | Show the list of allowed channels for `/wd`. |
+| `/config dp-channel add <channel>` | Restrict the `/dp` command to this channel only. |
+| `/config dp-channel remove <channel>` | Remove the `/dp` channel restriction. |
+| `/config dp-channel list` | Show the list of allowed channels for `/dp`. |
+| `/config show` | Show all current server configuration. |
 
 ---
 
